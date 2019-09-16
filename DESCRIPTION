@@ -1,0 +1,19 @@
+Package: UKBPheWAS
+Title: Code and utilities to run pheWAS analyses on the UK Biobank
+Version: 0.1
+Authors@R: 
+    person(given = "Marc-André",
+           family = "Legault",
+           role = c("aut", "cre"),
+           email = "marc-andre.legault.1@umontreal.ca")
+Description: Package to run pheWAS in the UK Biobank.
+License: Apache License (>= 2.0)
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 3.5)
+RoxygenNote: 6.1.1
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
