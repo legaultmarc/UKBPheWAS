@@ -4,7 +4,7 @@
 \alias{internal_do_logistic}
 \title{Do the logistic regression.}
 \usage{
-internal_do_logistic(cur_cases, xs_df)
+internal_do_logistic(cur_cases, configuration)
 }
 \arguments{
 \item{cur_cases}{A column data frame of sample IDs to consider to be cases.}

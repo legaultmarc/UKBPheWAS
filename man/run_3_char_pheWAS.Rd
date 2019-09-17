@@ -4,7 +4,7 @@
 \alias{run_3_char_phewas}
 \title{Run a 3 character ICD10 code pheWAS.}
 \usage{
-run_3_char_phewas(configuration, con, all_cases, codes)
+run_3_char_phewas(configuration, con, all_cases)
 }
 \arguments{
 \item{configuration}{A pheWAS configuration object.}
@@ -12,8 +12,6 @@ run_3_char_phewas(configuration, con, all_cases, codes)
 \item{con}{A connection to the DB.}
 
 \item{all_cases}{A dataframe with all of the EMR or death record data.}
-
-\item{codes}{All ICD10 codes that were found in the DB with enough cases.}
 }
 \description{
 Run a 3 character ICD10 code pheWAS.

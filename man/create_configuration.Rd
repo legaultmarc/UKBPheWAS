@@ -4,8 +4,8 @@
 \alias{create_configuration}
 \title{Construction function to create configuration objects for pheWAS analyses.}
 \usage{
-create_configuration(include_secondary_hospit = T,
-  include_death_records = T, min_num_cases = 50, ncpus = 3,
+create_configuration(include_secondary_hospit = TRUE,
+  include_death_records = TRUE, min_num_cases = 50, ncpus = 3,
   voi_idx = NULL, voi_name = NULL, voi_predicate = NULL, xs = NULL,
   model_rhs = "")
 }

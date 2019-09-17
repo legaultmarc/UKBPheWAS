@@ -131,12 +131,24 @@ variable_of_interest_index <- function(idx=2) {
 #' @export
 runPheWAS <- function(con, configuration) {
 
-  codes <- get_icd10_with_at_least_n_cases(
-    con,
-    configuration@min_num_cases,
-    configuration@include_secondary_hospit,
-    configuration@include_death_records
-  )
+  cat("UKBPheWAS\n\n")
+  cat("Running analysis with the following parameters:\n")
+  cat(paste0(
+    "    - Include secondary hospitalization codes: ",
+    configuration@include_secondary_hospit, "\n"
+  ))
+  cat(paste0(
+    "    - Include death records: ",
+    configuration@include_death_records, "\n"
+  ))
+  cat(paste0(
+    "    - Minimum number of cases for inclusion: ",
+    configuration@min_num_cases, "\n"
+  ))
+  cat(paste0(
+    "    - Number of CPUs to use: ",
+    configuration@ncpus, "\n\n"
+  ))
 
   # We get all cases in memory and we do the filtering in R.
   all_cases <- get_full_records(
@@ -145,19 +157,37 @@ runPheWAS <- function(con, configuration) {
     configuration@include_death_records
   )
 
+  # We exclude codes starting with S-Z as they correspond to special codings or
+  # external causes that are likely irrelevant in the context of a pheWAS.
+  excluded_chapters <- C("S", "T", "U", "V", "W", "X", "Y", "Z")
+
+  all_cases <- all_cases[
+    !(substr(all_cases$diag_icd10, 1, 1) %in% excluded_chapters),
+  ]
+
   # There are two ways of aggregating codes prior to analysis.
   # 1. By blocks (i.e. chunks of codes)
   # 2. By 3 characters codes (e.g. I20)
 
   # By default I will do both as well as no pre-processing and write the
   # results separately.
-  ### blocks_results <- run_block_phewas(configuration, con, all_cases, codes)
+  cat("Running analysis for naive ICD10 codes (no pre-processing)...\n")
+  naive_results <- run_naive_phewas(configuration, con, all_cases)
+  cat("Done!\n\n")
 
-  ### list(blocks_results=blocks_results)
-  three_char_icd10_results <- run_3_char_phewas(configuration, con, all_cases,
-                                                codes)
+  cat("Running analysis for blocks of ICD10 codes...\n")
+  blocks_results <- run_block_phewas(configuration, con, all_cases)
+  cat("Done!\n\n")
 
-  list(three_char_icd10_results = three_char_icd10_results)
+  cat("Running analysis for 3 character ICD10 codes...\n")
+  three_char_icd10_results <- run_3_char_phewas(configuration, con, all_cases)
+  cat("Done!\n\n")
+
+  list(
+    naive_results = naive_results,
+    blocks_results = blocks_results,
+    three_char_icd10_results = three_char_icd10_results
+  )
 }
 
 
@@ -166,13 +196,12 @@ runPheWAS <- function(con, configuration) {
 #' @param configuration A pheWAS configuration object.
 #' @param con A connection to the DB.
 #' @param all_cases A dataframe with all of the EMR or death record data.
-#' @param codes All ICD10 codes that were found in the DB with enough cases.
 #'
 #' @import here
 #' @import parallel
 #' @import doParallel
 #' @import foreach
-run_block_phewas <- function(configuration, con, all_cases, codes) {
+run_block_phewas <- function(configuration, con, all_cases) {
   # Read the block metadata.
   blocks <- read.csv(here("../../data/icd10/icd10_blocks.csv"))
 
@@ -185,37 +214,20 @@ run_block_phewas <- function(configuration, con, all_cases, codes) {
     .packages = c("UKBPheWAS", "broom")
   ) %dopar% {
 
-    # Disable linting because 'i' is not found by the linter even though it
-    # gets defined by dopar.
     block <- blocks[i, ]  # nolint
 
-    # Check to see if some included diagnostic codes are in the current
-    # iteration's block.
-    matching_codes <- codes[
-      sapply(codes, function(code) {
+    # Define cases.
+    cases <- all_cases[
+      sapply(all_cases$diag_icd10, function(code) {
         UKBPheWAS::code_in_range(code, block$left, block$right)
-      })
-    ]
+      }),
+    ]["eid"]
 
-    cur_result <- NULL
+    # Do the regression.
+    cur_result <- internal_do_logistic(cases, configuration)
 
-    if (length(matching_codes) == 0) {
-      print(paste0("Ignoring ", block$block, " because of insufficient cases"))
-    }
-
-    else {
-      # Define cases.
-      cases <- all_cases[all_cases$diag_icd10 %in% matching_codes, ]["eid"]
-
-      # Do the regression.
-      cur_result <- internal_do_logistic(cases, configuration@xs,
-                                         configuration@model_rhs)
-
-      # Filter the results to keep only relevant rows.
-      cur_result <- apply_predicate_to_results(cur_result,
-                                               configuration@voi_filter)
-
-      # Add information on the current block.
+    # Add information on the current block.
+    if (!is.null(cur_result)) {
       cur_result <- cbind(
         data.frame(outcome_description = block$block), cur_result
       )
@@ -228,7 +240,6 @@ run_block_phewas <- function(configuration, con, all_cases, codes) {
   stopCluster(cl)
 
   results
-
 }
 
 
@@ -237,17 +248,14 @@ run_block_phewas <- function(configuration, con, all_cases, codes) {
 #' @param configuration A pheWAS configuration object.
 #' @param con A connection to the DB.
 #' @param all_cases A dataframe with all of the EMR or death record data.
-#' @param codes All ICD10 codes that were found in the DB with enough cases.
 #'
 #' @import parallel
 #' @import doParallel
 #' @import foreach
-run_3_char_phewas <- function(configuration, con, all_cases, codes) {
-  three_char_codes <- unique(
-    sapply(codes, function(code) {
-      substr(code, 1, 3)
-    })
-  )
+run_3_char_phewas <- function(configuration, con, all_cases) {
+
+  all_cases$short_code <- substr(all_cases$diag_icd10, 1, 3)
+  three_char_codes <- unique(all_cases$short_code)
 
   cl <- makeCluster(configuration@ncpus)
   registerDoParallel(cl)  # nolint
@@ -259,27 +267,66 @@ run_3_char_phewas <- function(configuration, con, all_cases, codes) {
   ) %dopar% {
 
     # Find all cases that match the 3 character ICD10 code.
-    all_cases$short_code <- substr(all_cases$diag_icd10, 1, 3)
     cases <- all_cases[all_cases$short_code == code, ]["eid"]
 
     # Make sure we got a data frame with a single column named "eid".
     if (names(cases) != "eid")
       stop("Error identifying cases for 3 character ICD10 code.")
 
-    cur_result <- internal_do_logistic(
-      cases,
-      configuration@xs,
-      configuration@model_rhs
-    )
-
-    # Keep only the variable of interest.
-    cur_result <- apply_predicate_to_results(cur_result,
-                                             configuration@voi_filter)
+    cur_result <- internal_do_logistic(cases, configuration)
 
     # Remember the 3 character code used.
-    cur_result <- cbind(
-      data.frame(outcome_description = code), cur_result
-    )
+    if (!is.null(cur_result)) {
+      cur_result <- cbind(data.frame(outcome_description = code), cur_result)
+    }
+
+    cur_result
+
+  }
+
+  stopCluster(cl)
+
+  results
+}
+
+
+#' Run a naive pheWAS
+#'
+#' @param configuration A pheWAS configuration object.
+#' @param con A connection to the DB.
+#' @param all_cases A dataframe with all of the EMR or death record data.
+#'
+#' @import parallel
+#' @import doParallel
+#' @import foreach
+run_naive_phewas <- function(configuration, con, all_cases) {
+
+  cl <- makeCluster(configuration@ncpus)
+  registerDoParallel(cl)  # nolint
+
+  results <- foreach(
+    code = unique(all_cases$diag_icd10),
+    .combine = "rbind",
+    .packages = c("broom")
+  ) %dopar% {
+
+    # We compare up to the length of the current code.
+    cur_code_length <- nchar(code)
+
+    cases <- all_cases[
+      substr(all_cases$diag_icd10, 1, cur_code_length) == code,
+    ]["eid"]
+
+    # Make sure we got a data frame with a single column named "eid".
+    if (names(cases) != "eid")
+      stop("Error identifying cases for the naive pheWAS.")
+
+    cur_result <- internal_do_logistic(cases, configuration)
+
+    # Remember the code used.
+    if (!is.null(cur_result)) {
+      cur_result <- cbind(data.frame(outcome_description = code), cur_result)
+    }
 
     cur_result
 
@@ -307,9 +354,9 @@ apply_predicate_to_results <- function(results, predicate) {
 #' dataframe.
 #'
 #' @param cur_cases A column data frame of sample IDs to consider to be cases.
-#' @param xs_df A matrix of covariates to be included in the multivariate
-#'              regression.
-internal_do_logistic <- function(cur_cases, xs_df, model_rhs) {
+#' @param configuration A configuration object containing information on the
+#'                      analysis as well as the covariables matrix.
+internal_do_logistic <- function(cur_cases, configuration) {
 
   cur_cases$case <- 1
 
@@ -318,35 +365,39 @@ internal_do_logistic <- function(cur_cases, xs_df, model_rhs) {
   # This is a right outer join where we assume that samples not in the
   # cur_cases df are controls.
   df <- merge(
-    cur_cases, xs_df,
-    by.x = "eid", by.y = names(xs_df)[1],
+    cur_cases, configuration@xs,
+    by.x = "eid", by.y = names(configuration@xs)[1],
     all.x = FALSE, all.y = TRUE
   )
 
+  # Assume individuals not in the "cases" DF are controls.
   df[is.na(df$case), "case"] <- 0
 
   # Drop the missing values.
   df <- df[complete.cases(df), ]
 
   # Prepare the model.
-  if (is.null(model_rhs)) {
+  if (configuration@model_rhs == "") {
     # Treat all columns as covariables except for the sample_id column which is
     # assumed to be the first.
-    cols <- names(xs_df)
-    formula <- paste(
+    cols <- names(configuration@xs)
+    formula <- paste0(
       "case ~ ",
       paste0(cols[2:length(cols)], collapse = " + ")
     )
   }
   else {
-    formula <- paste0("case ~ ", model_rhs)
+    formula <- paste0("case ~ ", configuration@model_rhs)
   }
 
   formula <- as.formula(formula)
 
   fit <- glm(formula, data = df, family = "binomial")
 
-  format_fit(fit, df)
+  results <- format_fit(fit, df)
+
+  # Apply the predicate to filter the results.
+  apply_predicate_to_results(results, configuration@voi_filter)
 }
 
 

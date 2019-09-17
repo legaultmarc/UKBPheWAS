@@ -80,8 +80,8 @@ compare_codes <- function(a, b) {
   b <- strip_icd(b)
 
   # Compare based on chapters (first character).
-  chap_a = substr(a, 1, 1)
-  chap_b = substr(b, 1, 1)
+  chap_a <- substr(a, 1, 1)
+  chap_b <- substr(b, 1, 1)
 
   if (chap_a < chap_b) return(-1)
   if (chap_a > chap_b) return(1)
@@ -89,9 +89,9 @@ compare_codes <- function(a, b) {
   # Chapters are the same we need to compare codes.
   # We first truncate to the level of the broadest code.
   # At the same time, we remove the chapter (hence the -1 in the indexing).
-  min_length = min(nchar(a), nchar(b))
-  a = substr(a, 2, min_length)
-  b = substr(b, 2, min_length)
+  min_length <- min(nchar(a), nchar(b))
+  a <- substr(a, 2, min_length)
+  b <- substr(b, 2, min_length)
 
   if (a == b) return(0)
   if (a < b)

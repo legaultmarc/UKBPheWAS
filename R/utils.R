@@ -1,40 +1,9 @@
 library(RPostgres)
 
-#' Get a vec of icd10 codes with at least n occurences in hospitalization data.
+
+#' Get all hospitalization and/or death records from the UKB databse.
 #'
-#' This relies on the "full hesin" table.
-#'
-#' @param n The minimum number of cases for inclusion.
-#'
-#' @return A list of ICD10 codes.
-#'
-#' @export
-get_icd10_with_at_least_n_cases <- function(
-  con,
-  n,
-  include_secondary_hospit=T,
-  include_death_records=T
-)
-{
-
-  sql <- paste0(
-    "select ",
-    " diag_icd10 ",
-    internal_get_from_stmt(include_secondary_hospit, include_death_records),
-    "where diag_icd10 is not null ",
-    "group by diag_icd10 ",
-    "having count(distinct eid) >= $1 "
-  )
-
-  query <- dbSendQuery(con, sql)
-  dbBind(query, list(n))
-
-  df <- dbFetch(query)
-  dbClearResult(query)
-  df$diag_icd10
-}
-
-
+#' @import RPostgres
 get_full_records <- function(
   con,
   include_secondary_hospit,
@@ -42,7 +11,7 @@ get_full_records <- function(
 ) {
 
   sql <- paste0(
-    "select ",
+    "select distinct ",
     " eid, diag_icd10 ",
     internal_get_from_stmt(include_secondary_hospit, include_death_records),
     "where diag_icd10 is not null"
@@ -69,8 +38,7 @@ get_full_records <- function(
 internal_get_from_stmt <- function(
   include_secondary_hospit,
   include_death_records
-)
-{
+) {
 
   # We use a different table for the hospitalization data depending on the
   # use of primary or primary+secondary hospitalization codes.
