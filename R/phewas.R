@@ -1,7 +1,6 @@
 library(here)
-library(doParallel)
+library(doParallel)  # nolint
 library(foreach)
-library(broom)
 
 # Get covariates and samples to analyse
 # Get list of codes to test
@@ -22,24 +21,42 @@ library(broom)
 #' @exportClass Configuration
 Configuration <- setClass(
   "Configuration",
-  slots=list(
-    include_secondary_hospit="logical",
-    include_death_records="logical",
-    min_num_cases="numeric",
-    ncpus="numeric",
-    voi_idx="numeric",
-    xs="data.frame"
+  slots = list(
+    include_secondary_hospit = "logical",
+    include_death_records = "logical",
+    min_num_cases = "numeric",
+    ncpus = "numeric",
+    voi_idx = "numeric",
+    xs = "data.frame"
   )
 )
 
-defaultConfiguration <- Configuration(
-  include_secondary_hospit=T,
-  include_death_records=T,
-  min_num_cases=50,
-  ncpus=3,
-  voi_idx=2,
-  xs=data.frame()
+
+create_configuratioin <- Configuration(
+  include_secondary_hospit = T,
+  include_death_records = T,
+  min_num_cases = 50,
+  ncpus = 3,
+  voi_idx = 2,
+  xs = data.frame()
 )
+
+
+variable_of_interest_name <- function(name) {
+  predicate <- function(i, row) {
+    row$term == name
+  }
+  predicate
+}
+
+
+variable_of_interest_index <- function(idx=2) {
+  predicate <- function(i, row) {
+    i == idx
+  }
+  predicate
+}
+
 
 #' Main function to run a pheWAS.
 #'
@@ -77,10 +94,10 @@ runPheWAS <- function(configuration) {
   ### blocks_results <- run_block_phewas(configuration, con, all_cases, codes)
 
   ### list(blocks_results=blocks_results)
-  three_char_icd10_results <- run_3_char_pheWAS(configuration, con, all_cases,
+  three_char_icd10_results <- run_3_char_phewas(configuration, con, all_cases,
                                                 codes)
 
-  list(three_char_icd10_results=three_char_icd10_results)
+  list(three_char_icd10_results = three_char_icd10_results)
 }
 
 
@@ -100,14 +117,17 @@ run_block_phewas <- function(configuration, con, all_cases, codes) {
   blocks <- read.csv(here("../../data/icd10/icd10_blocks.csv"))
 
   cl <- makeCluster(configuration@ncpus)
-  registerDoParallel(cl)
+  registerDoParallel(cl)  # nolint
 
   results <- foreach(
-    i=1:nrow(blocks),
-    .combine="rbind",
-    .packages=c("UKBPheWAS", "broom")
+    i = 1:nrow(blocks),
+    .combine = "rbind",
+    .packages = c("UKBPheWAS", "broom")
   ) %dopar% {
-    block <- blocks[i, ]
+
+    # Disable linting because 'i' is not found by the linter even though it
+    # gets defined by dopar.
+    block <- blocks[i, ]  # nolint
 
     # Check to see if some included diagnostic codes are in the current
     # iteration's block.
@@ -134,8 +154,8 @@ run_block_phewas <- function(configuration, con, all_cases, codes) {
       cur_result <- cur_result[configuration@voi_idx, ]
 
       # Add information on the current block.
-      cur_result <- cbind(
-        data.frame(outcome_description=block$block), cur_result
+      cur_result <- cbind(
+        data.frame(outcome_description = block$block), cur_result
       )
     }
 
@@ -160,31 +180,32 @@ run_block_phewas <- function(configuration, con, all_cases, codes) {
 #' @import parallel
 #' @import doParallel
 #' @import foreach
-run_3_char_pheWAS <- function(configuration, con, all_cases, codes) {
-  # TODO test me...
-
+run_3_char_phewas <- function(configuration, con, all_cases, codes) {
   three_char_codes <- unique(
-    sapply(codes, function(code) { substr(code, 1, 3) })
+    sapply(codes, function(code) {
+      substr(code, 1, 3)
+    })
   )
 
   cl <- makeCluster(configuration@ncpus)
-  registerDoParallel(cl)
+  registerDoParallel(cl)  # nolint
 
   results <- foreach(
-    code=three_char_codes,
-    .combine="rbind",
-    .packages=c("broom")
+    code = three_char_codes,
+    .combine = "rbind",
+    .packages = c("broom")
   ) %dopar% {
 
     # Find all cases that match the 3 character ICD10 code.
     cases <- all_cases[
       sapply(all_cases$diag_icd10, function(icd) {
-        substr(icd, 1, 3) == code
+        substr(icd, 1, 3) == code  # nolint
       }),
     ]["eid"]
 
-    # Make sure we got a data frame with 1 column for the cases.
-    stopif(names(cases) != "eid")
+    # Make sure we got a data frame with a single column named "eid".
+    if (names(cases) != "eid")
+      stop("Error identifying cases for 3 character ICD10 code.")
 
     cur_result <- internal_do_logistic(cases, configuration@xs)
 
@@ -193,7 +214,7 @@ run_3_char_pheWAS <- function(configuration, con, all_cases, codes) {
 
     # Remember the 3 character code used.
     cur_result <- cbind(
-      data.frame(outcome_description=code), cur_result
+      data.frame(outcome_description = code), cur_result
     )
 
     cur_result
@@ -224,8 +245,8 @@ internal_do_logistic <- function(cur_cases, xs_df) {
   # cur_cases df are controls.
   df <- merge(
     cur_cases, xs_df,
-    by.x="eid", by.y=names(xs_df)[1],
-    all.x=F, all.y=T
+    by.x = "eid", by.y = names(xs_df)[1],
+    all.x = F, all.y = T
   )
 
   df[is.na(df$case), "case"] <- 0
@@ -237,17 +258,23 @@ internal_do_logistic <- function(cur_cases, xs_df) {
   cols <- names(xs_df)
   formula <- paste(
     "case ~ ",
-    paste0(cols[2:length(cols)], collapse=" + ")
+    paste0(cols[2:length(cols)], collapse = " + ")
   )
   formula <- as.formula(formula)
 
-  fit <- glm(formula, data=df, family="binomial")
+  fit <- glm(formula, data = df, family = "binomial")
 
   format_fit(fit, df)
 }
 
+#' Format a GLM fit object.
+#'
+#' This function calculates some extra statistics and formats the fit object
+#' as a dataframe.
+#'
+#' @import broom
 format_fit <- function(fit, data) {
-  df <- tidy(fit)
+  df <- broom::tidy(fit)
   df$nobs <- nobs(fit)
   df$n_cases <- sum(data$case == 1)
   df$n_controls <- sum(data$case == 0)
