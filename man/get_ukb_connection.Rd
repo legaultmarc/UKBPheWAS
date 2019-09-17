@@ -4,7 +4,7 @@
 \alias{get_ukb_connection}
 \title{Get a connection to the UK Biobank database.}
 \usage{
-get_ukb_connection()
+get_ukb_connection(password)
 }
 \value{
 A database connection object
@@ -13,6 +13,6 @@ A database connection object
 Get a connection to the UK Biobank database.
 }
 \examples{
-ukb_connect()
+ukb_connect("my_password")
 
 }

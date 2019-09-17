@@ -4,9 +4,11 @@
 \alias{runPheWAS}
 \title{Main function to run a pheWAS.}
 \usage{
-runPheWAS(configuration)
+runPheWAS(con, configuration)
 }
 \arguments{
+\item{con}{A database connection to the UK Biobank (StatGen format).}
+
 \item{configuration}{A configuration object.}
 }
 \description{
