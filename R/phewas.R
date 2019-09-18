@@ -159,7 +159,7 @@ runPheWAS <- function(con, configuration) {
 
   # We exclude codes starting with S-Z as they correspond to special codings or
   # external causes that are likely irrelevant in the context of a pheWAS.
-  excluded_chapters <- C("S", "T", "U", "V", "W", "X", "Y", "Z")
+  excluded_chapters <- c("S", "T", "U", "V", "W", "X", "Y", "Z")
 
   all_cases <- all_cases[
     !(substr(all_cases$diag_icd10, 1, 1) %in% excluded_chapters),
