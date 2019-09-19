@@ -21,6 +21,9 @@ get_full_records <- function(
   res <- dbFetch(query)
   dbClearResult(query)
 
+  # Make sure diag_icd10 are strings.
+  res$diag_icd10 <- as.character(res$diag_icd10)
+
   res
 }
 

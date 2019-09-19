@@ -28,7 +28,8 @@ Configuration <- setClass(
     ncpus = "numeric",
     voi_filter = "function",
     xs = "data.frame",
-    model_rhs = "character"
+    model_rhs = "character",
+    output_prefix = "character"
   )
 )
 
@@ -47,7 +48,8 @@ create_configuration <- function(
     voi_name = NULL,
     voi_predicate = NULL,
     xs = NULL,
-    model_rhs = ""
+    model_rhs = "",
+    output_prefix = "phewas"
   ) {
 
   # Check that some sort of variable of interest filtering has been provided.
@@ -95,7 +97,8 @@ create_configuration <- function(
     ncpus = ncpus,
     voi_filter = voi_filter,
     xs = xs,
-    model_rhs = model_rhs
+    model_rhs = model_rhs,
+    output_prefix = output_prefix
   )
 }
 
@@ -171,23 +174,33 @@ runPheWAS <- function(con, configuration) {
 
   # By default I will do both as well as no pre-processing and write the
   # results separately.
-  cat("Running analysis for naive ICD10 codes (no pre-processing)...\n")
-  naive_results <- run_naive_phewas(configuration, con, all_cases)
-  cat("Done!\n\n")
-
   cat("Running analysis for blocks of ICD10 codes...\n")
   blocks_results <- run_block_phewas(configuration, con, all_cases)
+  write.csv(blocks_results, paste0(configuration@output_prefix, "_blocks.csv"))
   cat("Done!\n\n")
 
   cat("Running analysis for 3 character ICD10 codes...\n")
   three_char_icd10_results <- run_3_char_phewas(configuration, con, all_cases)
+  write.csv(
+    three_char_icd10_results,
+    paste0(configuration@output_prefix, "_three_chars.csv")
+  )
+  cat("Done!\n\n")
+
+  cat("Running analysis for naive ICD10 codes (no pre-processing)...\n")
+  naive_results <- run_naive_phewas(configuration, con, all_cases)
+  write.csv(
+    naive_results,
+    paste0(configuration@output_prefix, "_naive.csv")
+  )
   cat("Done!\n\n")
 
   list(
-    naive_results = naive_results,
     blocks_results = blocks_results,
-    three_char_icd10_results = three_char_icd10_results
+    three_char_icd10_results = three_char_icd10_results,
+    naive_results = naive_results
   )
+
 }
 
 
@@ -213,7 +226,6 @@ run_block_phewas <- function(configuration, con, all_cases) {
     .combine = "rbind",
     .packages = c("UKBPheWAS", "broom")
   ) %dopar% {
-
     block <- blocks[i, ]  # nolint
 
     # Define cases.
@@ -359,6 +371,11 @@ apply_predicate_to_results <- function(results, predicate) {
 internal_do_logistic <- function(cur_cases, configuration) {
 
   cur_cases$case <- 1
+
+  # Check if there are enough cases to test.
+  if (nrow(cur_cases) < configuration@min_num_cases) {
+    return(NULL)
+  }
 
   # Join the cases with the covariables.
   # We assume the first column in the XS matrix is sample IDs.
