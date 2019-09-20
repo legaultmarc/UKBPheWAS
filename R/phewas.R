@@ -226,7 +226,8 @@ run_block_phewas <- function(configuration, con, all_cases) {
     .combine = "rbind",
     .packages = c("UKBPheWAS", "broom")
   ) %dopar% {
-    block <- blocks[i, ]  # nolint
+
+    block <- blocks[i, ]
 
     # Define cases.
     cases <- all_cases[
@@ -370,12 +371,12 @@ apply_predicate_to_results <- function(results, predicate) {
 #'                      analysis as well as the covariables matrix.
 internal_do_logistic <- function(cur_cases, configuration) {
 
-  cur_cases$case <- 1
-
   # Check if there are enough cases to test.
-  if (nrow(cur_cases) < configuration@min_num_cases) {
+  if (nrow(cur_cases) < configuration@min_num_cases || nrow(cur_cases) == 0) {
     return(NULL)
   }
+
+  cur_cases$case <- 1
 
   # Join the cases with the covariables.
   # We assume the first column in the XS matrix is sample IDs.
