@@ -29,7 +29,8 @@ Configuration <- setClass(
     voi_filter = "function",
     xs = "data.frame",
     model_rhs = "character",
-    output_prefix = "character"
+    output_prefix = "character",
+    use_fastglm = "logical"
   )
 )
 
@@ -49,7 +50,8 @@ create_configuration <- function(
     voi_predicate = NULL,
     xs = NULL,
     model_rhs = "",
-    output_prefix = "phewas"
+    output_prefix = "phewas",
+    use_fastglm = FALSE
   ) {
 
   # Check that some sort of variable of interest filtering has been provided.
@@ -98,8 +100,15 @@ create_configuration <- function(
     voi_filter = voi_filter,
     xs = xs,
     model_rhs = model_rhs,
-    output_prefix = output_prefix
+    output_prefix = output_prefix,
+    use_fastglm = use_fastglm
   )
+}
+
+
+#' Logging function that includes a timestamp.
+log_message <- function(message) {
+  cat(paste0(format(Sys.time(), "%Y-%m-%d at %X"), " -- ",  message, "\n"))
 }
 
 
@@ -134,7 +143,7 @@ variable_of_interest_index <- function(idx=2) {
 #' @export
 runPheWAS <- function(con, configuration) {
 
-  cat("UKBPheWAS\n\n")
+  log_message("Starting UKBPheWAS\n")
   cat("Running analysis with the following parameters:\n")
   cat(paste0(
     "    - Include secondary hospitalization codes: ",
@@ -150,7 +159,11 @@ runPheWAS <- function(con, configuration) {
   ))
   cat(paste0(
     "    - Number of CPUs to use: ",
-    configuration@ncpus, "\n\n"
+    configuration@ncpus, "\n"
+  ))
+  cat(paste0(
+    "    - Use of fastglm package: ",
+    configuration@use_fastglm, "\n\n"
   ))
 
   # We get all cases in memory and we do the filtering in R.
@@ -174,12 +187,12 @@ runPheWAS <- function(con, configuration) {
 
   # By default I will do both as well as no pre-processing and write the
   # results separately.
-  cat("Running analysis for blocks of ICD10 codes...\n")
+  log_message("Running analysis for blocks of ICD10 codes...")
   blocks_results <- run_block_phewas(configuration, con, all_cases)
   write.csv(blocks_results, paste0(configuration@output_prefix, "_blocks.csv"))
   cat("Done!\n\n")
 
-  cat("Running analysis for 3 character ICD10 codes...\n")
+  log_message("Running analysis for 3 character ICD10 codes...")
   three_char_icd10_results <- run_3_char_phewas(configuration, con, all_cases)
   write.csv(
     three_char_icd10_results,
@@ -187,13 +200,15 @@ runPheWAS <- function(con, configuration) {
   )
   cat("Done!\n\n")
 
-  cat("Running analysis for naive ICD10 codes (no pre-processing)...\n")
+  log_message("Running analysis for naive ICD10 codes (no pre-processing)...")
   naive_results <- run_naive_phewas(configuration, con, all_cases)
   write.csv(
     naive_results,
     paste0(configuration@output_prefix, "_naive.csv")
   )
   cat("Done!\n\n")
+
+  log_message("All analyses completed")
 
   list(
     blocks_results = blocks_results,
@@ -369,6 +384,8 @@ apply_predicate_to_results <- function(results, predicate) {
 #' @param cur_cases A column data frame of sample IDs to consider to be cases.
 #' @param configuration A configuration object containing information on the
 #'                      analysis as well as the covariables matrix.
+#'
+#' @seealso fastglm
 internal_do_logistic <- function(cur_cases, configuration) {
 
   # Check if there are enough cases to test.
@@ -409,13 +426,44 @@ internal_do_logistic <- function(cur_cases, configuration) {
   }
 
   formula <- as.formula(formula)
+  if (configuration@use_fastglm) {
+    # Use the LLT method as it is one of the fastest.
+    # Other choices are: 1:qr; 3:LDLT
+    # See doc: https://github.com/jaredhuling/fastglm
+    # For installation and details.
+    fit <- fastglm::fastglm(
+      x = model.matrix(formula, data = df),
+      y = df$case,
+      data = df,
+      family = binomial(),
+      method = 2
+    )
+  }
+  else {
+    fit <- glm(formula, data = df, family = "binomial")
+  }
 
-  fit <- glm(formula, data = df, family = "binomial")
-
-  results <- format_fit(fit, df)
+  results <- format_fit(fit, df, configuration@use_fastglm)
 
   # Apply the predicate to filter the results.
   apply_predicate_to_results(results, configuration@voi_filter)
+}
+
+#' A "copy" of broom::tidy for fastglm objects.
+#'
+#' The goal is to achieve results close enough or identical to format_fit so
+#' that the use of fastglm is mostly transparent.
+tidy_fastglm <- function(fit) {
+  # This reproduces the results from broom::tidy
+  df <- data.frame(
+    term = names(fit$coefficients),
+    estimate = fit$coefficients,
+    std.error = fit$se
+  )
+  df$statistic <- df$estimate / df$std.error
+  df$p.value <- 2 * pnorm(-abs(df$statistic))
+
+  df
 }
 
 
@@ -425,16 +473,32 @@ internal_do_logistic <- function(cur_cases, configuration) {
 #' as a dataframe.
 #'
 #' @import broom
-format_fit <- function(fit, data) {
-  df <- broom::tidy(fit)
-  df$nobs <- nobs(fit)
+format_fit <- function(fit, data, fastglm_format) {
+  if (fastglm_format) {
+    df <- tidy_fastglm(fit)
+    # Manually calculate the Wald CI.
+    ci <- data.frame(
+      ci_95_low = df$estimate + qnorm(0.05 / 2) * df$std.error,
+      ci_95_high = df$estimate - qnorm(0.05 / 2) * df$std.error
+    )
+
+    # We use complete cases before so this should be safe to estimate the
+    # number of observations.
+    df$nobs <- nrow(data)
+  }
+
+  else {
+    df <- broom::tidy(fit)
+    ci <- as.data.frame(confint.default(fit))
+    names(ci) <- c("ci_95_low", "ci_95_high")
+    df$nobs <- nobs(fit)
+  }
+
   df$n_cases <- sum(data$case == 1)
   df$n_controls <- sum(data$case == 0)
   df$prevalence <- df$n_cases / df$nobs
 
   # Add the 95% CI
-  ci <- confint.default(fit)
-  colnames(ci) <- c("ci_95_low", "ci_95_high")
   df <- cbind(df, ci)
 
   df
