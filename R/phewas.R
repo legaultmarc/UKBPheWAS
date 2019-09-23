@@ -446,7 +446,13 @@ internal_do_logistic <- function(cur_cases, configuration) {
   results <- format_fit(fit, df, configuration@use_fastglm)
 
   # Apply the predicate to filter the results.
-  apply_predicate_to_results(results, configuration@voi_filter)
+  results <- apply_predicate_to_results(results, configuration@voi_filter)
+
+  if (nrow(results) == 0) {
+    warning("No results selected by variable of interest filter.")
+  }
+
+  results
 }
 
 #' A "copy" of broom::tidy for fastglm objects.
