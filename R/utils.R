@@ -88,3 +88,30 @@ get_covariables_hcn4_project <- function(con) {
 
   res
 }
+
+
+#' Get all biomarker data in the long format (averaged over visits if needed).
+#'
+#' @import RPostgres
+get_all_biomarkers <- function(con) {
+
+  sql <- paste0(
+    "select ",
+    "  var.sample_id, ",
+    "  var.variable_id, ",
+    "  string_agg(distinct meta.description, ', ') as description, ",
+    "  avg(var.value) as val ",
+    "from variable_float var right outer join ( ",
+    "  select * from variable_metadata ",
+    "  where data_type='float' and coding_id is NULL ",
+    ") meta on var.variable_id=meta.variable_id ",
+    "group by var.variable_id, var.sample_id; "
+  )
+
+  query <- dbSendQuery(con, sql)
+  res <- dbFetch(query)
+  dbClearResult(query)
+
+  res
+
+}
