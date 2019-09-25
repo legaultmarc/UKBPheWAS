@@ -88,3 +88,66 @@ get_covariables_hcn4_project <- function(con) {
 
   res
 }
+
+
+extract_raw_data <- function(configuration) {
+
+  con <- get_ukb_connection(configuration$db_password)
+
+  data <- list()
+
+  # Extract information on diseases if required.
+  if (should_do_binary(configuration)) {
+    data$diseases <- get_full_records(
+      con,
+      configuration$binary_configuration$include_secondary_hospit,
+      configuration$binary_configuration$include_death_records
+    )
+  }
+
+  if (should_do_linear(configuration)) {
+    data$continuous <- read.csv(
+      paste0(
+        configuration$continuous_variables_path,
+        "/transformed_qt_traits.csv.gz"
+      ),
+      stringsAsFactors = FALSE
+    )
+
+    data$continuous_metadata <- read.csv(
+      paste0(
+        configuration$continuous_variables_path,
+        "/transforms_metadata.csv"
+      ),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  dbDisconnect(con)
+
+  data
+
+}
+
+
+# Keep only rows of interest from output and save to disk.
+clean_and_save <- function(analysis_label, results, configuration) {
+  if (!is.null(configuration$results_filter)) {
+    results <- results[
+      sapply(1:nrow(results), function(i) {
+        configuration$results_filter(i, results[i, ])
+      }),
+    ]
+  }
+
+  if (nrow(results) == 0) {
+    warning("No results selected by variable of interest filter.")
+  }
+
+  else {
+    filename <- paste0(configuration$output_prefix, "_", analysis_label, ".csv")
+    cat(paste0("WRITING results file: ", filename, "\n"))
+
+    write.csv(results, filename, row.names = FALSE)
+  }
+}

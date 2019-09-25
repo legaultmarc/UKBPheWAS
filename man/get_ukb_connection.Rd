@@ -13,6 +13,8 @@ A database connection object
 Get a connection to the UK Biobank database.
 }
 \examples{
-ukb_connect("my_password")
+\dontrun{
+get_ukb_connection("my_password")
+}
 
 }

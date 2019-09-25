@@ -15,6 +15,29 @@ library(foreach)
 # Note always match children codes.
 
 
+
+#' A configuration class that is specific to binary traits pheWAS.
+#'
+#' @export BinaryConfiguration
+#' @exportClass BinaryConfiguration
+BinaryConfiguration <- setClass(
+  "BinaryConfiguration",
+  slots = list(
+    include_secondary_hospit = "logical",
+    include_death_records = "logical",
+    min_num_cases = "numeric",
+    use_fastglm = "logical"
+  )
+)
+
+
+#' A configuration class that is specific to continuous traits pheWAS.
+#'
+#' @export ContinuousConfiguration
+#' @exportClass ContinuousConfiguration
+ContinuousConfiguration <- setClass("ContinuousConfiguration")
+
+
 #' A configuration class to parametrize PheWAS analyses.
 #'
 #' @export Configuration
@@ -22,18 +45,15 @@ library(foreach)
 Configuration <- setClass(
   "Configuration",
   slots = list(
-    include_secondary_hospit = "logical",
-    include_death_records = "logical",
-    min_num_cases = "numeric",
     ncpus = "numeric",
     voi_filter = "function",
     xs = "data.frame",
     model_rhs = "character",
     output_prefix = "character",
-    use_fastglm = "logical"
+    binary_configuration = "BinaryConfiguration",
+    continuous_configuration = "ContinuousConfiguration"
   )
 )
-
 
 #' Construction function to create configuration objects for pheWAS analyses.
 #'
@@ -44,15 +64,34 @@ create_configuration <- function(
     include_secondary_hospit = TRUE,
     include_death_records = TRUE,
     min_num_cases = 50,
-    ncpus = 3,
+    ncpus = 10,
     voi_idx = NULL,
     voi_name = NULL,
     voi_predicate = NULL,
     xs = NULL,
     model_rhs = "",
     output_prefix = "phewas",
-    use_fastglm = FALSE
+    use_fastglm = TRUE,
+    do_continuous = TRUE,
+    do_binary = TRUE
   ) {
+
+  if (do_continuous)
+    continuous_config <- ContinuousConfiguration()
+  else
+    continuous_config <- NULL
+
+  if (do_binary) {
+    binary_config <- BinaryConfiguration(
+      include_secondary_hospit = include_secondary_hospit,
+      include_death_records = include_death_records,
+      min_num_cases = min_num_cases,
+      use_fastglm = use_fastglm
+    )
+  }
+  else {
+    binary_config <- NULL
+  }
 
   # Check that some sort of variable of interest filtering has been provided.
   n_voi_filters <- sum(
@@ -93,15 +132,13 @@ create_configuration <- function(
   }
 
   Configuration(
-    include_secondary_hospit = include_secondary_hospit,
-    include_death_records = include_death_records,
-    min_num_cases = min_num_cases,
     ncpus = ncpus,
     voi_filter = voi_filter,
     xs = xs,
     model_rhs = model_rhs,
     output_prefix = output_prefix,
-    use_fastglm = use_fastglm
+    binary_configuration = binary_config,
+    continuous_configuration = continuous_config
   )
 }
 
@@ -132,6 +169,65 @@ variable_of_interest_index <- function(idx=2) {
 }
 
 
+#' Logs the configuration and welcome message.
+log_config <- function(configuration, biomarker = FALSE) {
+  log_message("Starting UKBPheWAS\n")
+  cat("Running analysis with the following parameters:\n")
+
+  if (!biomarker) {
+    cat("    - Logistic regression of HES and death records data\n\n")
+    cat(paste0(
+      "    - Include secondary hospitalization codes: ",
+      configuration@include_secondary_hospit, "\n"
+    ))
+    cat(paste0(
+      "    - Include death records: ",
+      configuration@include_death_records, "\n"
+    ))
+    cat(paste0(
+      "    - Minimum number of cases for inclusion: ",
+      configuration@min_num_cases, "\n"
+    ))
+    cat(paste0(
+      "    - Use of fastglm package: ",
+      configuration@use_fastglm, "\n\n"
+    ))
+
+  }
+  else {
+    cat("    - Linear regression of biomarkers\n")
+  }
+
+  cat(paste0(
+    "    - Number of CPUs to use: ",
+    configuration@ncpus, "\n\n"
+  ))
+
+}
+
+
+#' Main function to run a pheWAS on biomarker data.
+#'
+#' @param con A database connection to the Biomarker UK Biobank database.
+#' @param configuration A configuration object.
+#'
+#' @export
+runBiomarkerPheWAS <- function(con, configuration) {
+
+  log_config(configuration, biomarker = TRUE)
+
+  log_message("Running analysis on biomarkers...")
+  results <- internal_run_biomarker_phewas(configuration, con)
+  write.csv(
+    results,
+    paste0(configuration@output_prefix, "_biomarkers.csv")
+  )
+  cat("Done!\n\n")
+
+  results
+}
+
+
 #' Main function to run a pheWAS.
 #'
 #' This function takes a configuration object and dispatches to the relevant
@@ -143,28 +239,7 @@ variable_of_interest_index <- function(idx=2) {
 #' @export
 runPheWAS <- function(con, configuration) {
 
-  log_message("Starting UKBPheWAS\n")
-  cat("Running analysis with the following parameters:\n")
-  cat(paste0(
-    "    - Include secondary hospitalization codes: ",
-    configuration@include_secondary_hospit, "\n"
-  ))
-  cat(paste0(
-    "    - Include death records: ",
-    configuration@include_death_records, "\n"
-  ))
-  cat(paste0(
-    "    - Minimum number of cases for inclusion: ",
-    configuration@min_num_cases, "\n"
-  ))
-  cat(paste0(
-    "    - Number of CPUs to use: ",
-    configuration@ncpus, "\n"
-  ))
-  cat(paste0(
-    "    - Use of fastglm package: ",
-    configuration@use_fastglm, "\n\n"
-  ))
+  log_config(configuration)
 
   # We get all cases in memory and we do the filtering in R.
   all_cases <- get_full_records(
@@ -366,13 +441,73 @@ run_naive_phewas <- function(configuration, con, all_cases) {
 }
 
 
+#' Run a pheWAS on biomarker traits.
+#'
+#' @param configuration A pheWAS configuration object.
+#' @param con A connection to the biomarker DB.
+#'
+#' @import parallel
+#' @import doParallel
+#' @import foreach
+internal_run_biomarker_phewas <- function(configuration, con) {
+
+  # Get biomarkers.
+  data <- get_all_biomarkers(con)
+
+  variable_ids <- unique(data$variable_id)
+
+  cl <- makeCluster(configuration@ncpus)
+  registerDoParallel(cl)  # nolint
+
+  results <- foreach(
+    var = variable_ids,
+    .combine = "rbind",
+    .packages = c("broom")
+  ) %dopar% {
+
+    # Filter the data.
+    cur <- data[data$variable_id == var, ]
+
+    cur_result <- internal_do_linear(cur[, c("sample_id", "val")],
+                                     configuration)
+
+    if (!is.null(cur_result)) {
+      cur_result <- cbind(
+        # Add info on the outcome to the results.
+        data.frame(
+          outcome_description = cur[1, "description"],
+          ukb_variable_id = var
+        ),
+        cur_result
+      )
+    }
+    else {
+      warning(paste0("Linear regression failed for variable ", var))
+    }
+
+    cur_result
+
+  }
+
+  stopCluster(cl)
+
+  results
+}
+
+
 #' Utility function for row-wise filtering of results data frame.
 apply_predicate_to_results <- function(results, predicate) {
-  results[
+  results <- results[
     sapply(1:nrow(results), function(i) {
       predicate(i, results[i, ])
     }),
   ]
+
+  if (nrow(results) == 0) {
+    warning("No results selected by variable of interest filter.")
+  }
+
+  results
 }
 
 
@@ -412,20 +547,8 @@ internal_do_logistic <- function(cur_cases, configuration) {
   df <- df[complete.cases(df), ]
 
   # Prepare the model.
-  if (configuration@model_rhs == "") {
-    # Treat all columns as covariables except for the sample_id column which is
-    # assumed to be the first.
-    cols <- names(configuration@xs)
-    formula <- paste0(
-      "case ~ ",
-      paste0(cols[2:length(cols)], collapse = " + ")
-    )
-  }
-  else {
-    formula <- paste0("case ~ ", configuration@model_rhs)
-  }
+  formula <- prepare_formula("case", configuration)
 
-  formula <- as.formula(formula)
   if (configuration@use_fastglm) {
     # Use the LLT method as it is one of the fastest.
     # Other choices are: 1:qr; 3:LDLT
@@ -443,22 +566,17 @@ internal_do_logistic <- function(cur_cases, configuration) {
     fit <- glm(formula, data = df, family = "binomial")
   }
 
-  results <- format_fit(fit, df, configuration@use_fastglm)
+  results <- format_logistic_fit(fit, df, configuration@use_fastglm)
 
   # Apply the predicate to filter the results.
-  results <- apply_predicate_to_results(results, configuration@voi_filter)
+  apply_predicate_to_results(results, configuration@voi_filter)
 
-  if (nrow(results) == 0) {
-    warning("No results selected by variable of interest filter.")
-  }
-
-  results
 }
 
 #' A "copy" of broom::tidy for fastglm objects.
 #'
-#' The goal is to achieve results close enough or identical to format_fit so
-#' that the use of fastglm is mostly transparent.
+#' The goal is to achieve results close enough or identical to 
+#' format_logistic_fit so that the use of fastglm is mostly transparent.
 tidy_fastglm <- function(fit) {
   # This reproduces the results from broom::tidy
   df <- data.frame(
@@ -479,9 +597,11 @@ tidy_fastglm <- function(fit) {
 #' as a dataframe.
 #'
 #' @import broom
-format_fit <- function(fit, data, fastglm_format) {
+format_logistic_fit <- function(fit, data, fastglm_format) {
   if (fastglm_format) {
+
     df <- tidy_fastglm(fit)
+
     # Manually calculate the Wald CI.
     ci <- data.frame(
       ci_95_low = df$estimate + qnorm(0.05 / 2) * df$std.error,
@@ -508,4 +628,63 @@ format_fit <- function(fit, data, fastglm_format) {
   df <- cbind(df, ci)
 
   df
+}
+
+
+prepare_formula <- function(outcome_label, configuration) {
+  if (configuration@model_rhs == "") {
+    cols <- names(configuration@xs)
+
+    formula <- paste0(
+      outcome_label, " ~ ",
+      paste0(cols[2:length(cols)], collapse = " + ")
+    )
+  }
+
+  else {
+    formula <- paste0(outcome_label, " ~ ", configuration@model_rhs)
+  }
+
+  as.formula(formula)
+
+}
+
+
+#' Do the linear regression.
+#'
+#' Do the linear regression for the current biomarker.
+#'
+#' @param y A data.frame with two columns: sample_id and value (assumed to be
+#'          provided in that order).
+#' @param configuration A configuration object containing information on the
+#'                      analysis as well as the covariables matrix.
+#'
+#' @import broom
+internal_do_linear <- function(y, configuration) {
+  df <- merge(
+    y, configuration@xs,
+    by.x = names(y)[1],
+    by.y = names(configuration@xs)[1],
+    all.x = FALSE, all.y = TRUE
+  )
+
+  df <- df[complete.cases(df), ]
+
+  if (nrow(df) == 0) {
+    return(NULL)
+  }
+
+  formula <- prepare_formula("val", configuration)
+
+  fit <- lm(formula, data = df)
+
+  results <- broom::tidy(fit)
+
+  # Add the CI.
+  ci <- as.data.frame(confint.default(fit))
+  names(ci) <- c("ci_95_low", "ci_95_high")
+  results <- cbind(results, ci)
+
+  apply_predicate_to_results(results, configuration@voi_filter)
+
 }
