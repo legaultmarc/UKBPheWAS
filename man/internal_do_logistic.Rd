@@ -9,10 +9,13 @@ internal_do_logistic(cur_cases, configuration)
 \arguments{
 \item{cur_cases}{A column data frame of sample IDs to consider to be cases.}
 
-\item{xs_df}{A matrix of covariates to be included in the multivariate
-regression.}
+\item{configuration}{A configuration object containing information on the
+analysis as well as the covariables matrix.}
 }
 \description{
 Do the actual regression from the current cases and the prepared covariates
 dataframe.
+}
+\seealso{
+fastglm
 }

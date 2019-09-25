@@ -2,7 +2,7 @@
 % Please edit documentation in R/phewas.R
 \name{runPheWAS}
 \alias{runPheWAS}
-\title{Main function to run a pheWAS.}
+\title{Main function to run a pheWAS on hospit and/or death data.}
 \usage{
 runPheWAS(con, configuration)
 }
