@@ -158,12 +158,12 @@ log_config <- function(configuration, biomarker = FALSE) {
 
   }
   else {
-    cat("    - Linear regression of biomarkers\n\n")
+    cat("    - Linear regression of biomarkers\n")
   }
 
   cat(paste0(
     "    - Number of CPUs to use: ",
-    configuration@ncpus, "\n"
+    configuration@ncpus, "\n\n"
   ))
 
 }

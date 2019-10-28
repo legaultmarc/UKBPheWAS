@@ -95,6 +95,7 @@ get_covariables_hcn4_project <- function(con) {
 #' @import RPostgres
 get_all_biomarkers <- function(con) {
 
+  # Select sample_id, variable_id, description, val
   sql <- paste0(
     "select ",
     "  var.sample_id, ",
@@ -107,6 +108,9 @@ get_all_biomarkers <- function(con) {
     ") meta on var.variable_id=meta.variable_id ",
     "group by var.variable_id, var.sample_id; "
   )
+
+  # Do the same with variables from the "main" database.
+  
 
   query <- dbSendQuery(con, sql)
   res <- dbFetch(query)
