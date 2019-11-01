@@ -15,6 +15,29 @@ library(foreach)
 # Note always match children codes.
 
 
+
+#' A configuration class that is specific to binary traits pheWAS.
+#'
+#' @export BinaryConfiguration
+#' @exportClass BinaryConfiguration
+BinaryConfiguration <- setClass(
+  "BinaryConfiguration",
+  slots = list(
+    include_secondary_hospit = "logical",
+    include_death_records = "logical",
+    min_num_cases = "numeric",
+    use_fastglm = "logical"
+  )
+)
+
+
+#' A configuration class that is specific to continuous traits pheWAS.
+#'
+#' @export ContinuousConfiguration
+#' @exportClass ContinuousConfiguration
+ContinuousConfiguration <- setClass("ContinuousConfiguration")
+
+
 #' A configuration class to parametrize PheWAS analyses.
 #'
 #' @export Configuration
@@ -22,18 +45,15 @@ library(foreach)
 Configuration <- setClass(
   "Configuration",
   slots = list(
-    include_secondary_hospit = "logical",
-    include_death_records = "logical",
-    min_num_cases = "numeric",
     ncpus = "numeric",
     voi_filter = "function",
     xs = "data.frame",
     model_rhs = "character",
     output_prefix = "character",
-    use_fastglm = "logical"
+    binary_configuration = "BinaryConfiguration",
+    continuous_configuration = "ContinuousConfiguration"
   )
 )
-
 
 #' Construction function to create configuration objects for pheWAS analyses.
 #'
@@ -44,15 +64,34 @@ create_configuration <- function(
     include_secondary_hospit = TRUE,
     include_death_records = TRUE,
     min_num_cases = 50,
-    ncpus = 3,
+    ncpus = 10,
     voi_idx = NULL,
     voi_name = NULL,
     voi_predicate = NULL,
     xs = NULL,
     model_rhs = "",
     output_prefix = "phewas",
-    use_fastglm = FALSE
+    use_fastglm = TRUE,
+    do_continuous = TRUE,
+    do_binary = TRUE
   ) {
+
+  if (do_continuous)
+    continuous_config <- ContinuousConfiguration()
+  else
+    continuous_config <- NULL
+
+  if (do_binary) {
+    binary_config <- BinaryConfiguration(
+      include_secondary_hospit = include_secondary_hospit,
+      include_death_records = include_death_records,
+      min_num_cases = min_num_cases,
+      use_fastglm = use_fastglm
+    )
+  }
+  else {
+    binary_config <- NULL
+  }
 
   # Check that some sort of variable of interest filtering has been provided.
   n_voi_filters <- sum(
@@ -93,15 +132,13 @@ create_configuration <- function(
   }
 
   Configuration(
-    include_secondary_hospit = include_secondary_hospit,
-    include_death_records = include_death_records,
-    min_num_cases = min_num_cases,
     ncpus = ncpus,
     voi_filter = voi_filter,
     xs = xs,
     model_rhs = model_rhs,
     output_prefix = output_prefix,
-    use_fastglm = use_fastglm
+    binary_configuration = binary_config,
+    continuous_configuration = continuous_config
   )
 }
 
@@ -191,7 +228,7 @@ runBiomarkerPheWAS <- function(con, configuration) {
 }
 
 
-#' Main function to run a pheWAS on hospit and/or death data.
+#' Main function to run a pheWAS.
 #'
 #' This function takes a configuration object and dispatches to the relevant
 #' function.

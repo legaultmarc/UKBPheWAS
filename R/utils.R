@@ -90,32 +90,62 @@ get_covariables_hcn4_project <- function(con) {
 }
 
 
-#' Get all biomarker data in the long format (averaged over visits if needed).
-#'
-#' @import RPostgres
-get_all_biomarkers <- function(con) {
+extract_raw_data <- function(
+  configuration,
+  continuous_variables_path = "/data/projects/uk_biobank/data/reports/SGR-2094/"
+) {
 
-  # Select sample_id, variable_id, description, val
-  sql <- paste0(
-    "select ",
-    "  var.sample_id, ",
-    "  var.variable_id, ",
-    "  string_agg(distinct meta.description, ', ') as description, ",
-    "  avg(var.value) as val ",
-    "from variable_float var right outer join ( ",
-    "  select * from variable_metadata ",
-    "  where data_type='float' and coding_id is NULL ",
-    ") meta on var.variable_id=meta.variable_id ",
-    "group by var.variable_id, var.sample_id; "
-  )
+  con <- get_ukb_connection(configuration$db_password)
 
-  # Do the same with variables from the "main" database.
-  
+  data <- list()
 
-  query <- dbSendQuery(con, sql)
-  res <- dbFetch(query)
-  dbClearResult(query)
+  # Extract information on diseases if required.
+  if (should_do_binary(configuration)) {
+    data$diseases <- get_full_records(
+      con,
+      configuration$binary_configuration$include_secondary_hospit,
+      configuration$binary_configuration$include_death_records
+    )
+  }
 
-  res
+  if (should_do_linear(configuration)) {
+    data$continuous <- read.csv(
+      paste0(continuous_variables_path, "/transformed_qt_traits.csv.gz"),
+      stringsAsFactors = FALSE
+    )
 
+    data$continuous_metadata <- read.csv(
+      paste0(continuous_variables_path, "/transforms_metadata.csv"),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  dbDisconnect(con)
+
+  data
+
+}
+
+
+# Keep only rows of interest from output and save to disk.
+clean_and_save <- function(analysis_label, results, configuration) {
+  print(str(results))
+  # TODO configuration$results_filter undefined.
+  # probably change to results instead of voi
+  results <- results[
+    sapply(1:nrow(results), function(i) {
+      configuration$results_filter(i, results[i, ])
+    }),
+  ]
+
+  if (nrow(results) == 0) {
+    warning("No results selected by variable of interest filter.")
+  }
+
+  else {
+    write.csv(
+      results,
+      paste0(configuration$output_prefix, "_", analysis_label, ".csv")
+    )
+  }
 }

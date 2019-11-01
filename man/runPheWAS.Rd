@@ -2,14 +2,14 @@
 % Please edit documentation in R/phewas.R
 \name{runPheWAS}
 \alias{runPheWAS}
-\title{Main function to run a pheWAS on hospit and/or death data.}
+\title{Main function to run a pheWAS.}
 \usage{
-runPheWAS(con, configuration)
+runPheWAS(configuration)
 }
 \arguments{
-\item{con}{A database connection to the UK Biobank (StatGen format).}
-
 \item{configuration}{A configuration object.}
+
+\item{con}{A database connection to the UK Biobank (StatGen format).}
 }
 \description{
 This function takes a configuration object and dispatches to the relevant
