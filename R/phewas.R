@@ -12,8 +12,6 @@ runPheWAS <- function(configuration, raw_cache = NULL) {
 
   log_configuration(configuration)
 
-  limit = 20
-
   if (is.null(raw_cache)) {
     raw <- extract_raw_data(configuration)
   }
@@ -40,7 +38,7 @@ runPheWAS <- function(configuration, raw_cache = NULL) {
     cat("Running analysis based on 3 character codes...\n")
     results <- generator_icd10_three_chars(
       configuration, raw, configuration$binary_configuration$callback, cl,
-      limit = limit
+      limit = configuration$limit
     )
     results <- clean_and_save("3chars", results, configuration)
     cat("DONE!\n")
@@ -49,16 +47,18 @@ runPheWAS <- function(configuration, raw_cache = NULL) {
     cat("Running analysis based on raw ICD10 codes...\n")
     results <- generator_icd10_raw(
       configuration, raw, configuration$binary_configuration$callback, cl,
-      limit = limit
+      limit = configuration$limit
     )
     results <- clean_and_save("raw", results, configuration)
     cat("DONE!\n")
 
     # ICD10 blocks
+    # TODO: This is very slow because of the sapply. I should write a
+    # vectorized implementation at some point.
     cat("Running analysis based on ICD10 blocks...\n")
     results <- generator_icd10_blocks(
       configuration, raw, configuration$binary_configuration$callback, cl,
-      limit = limit
+      limit = configuration$limit
     )
     results <- clean_and_save("blocks", results, configuration)
     cat("DONE!\n")
@@ -83,7 +83,7 @@ runPheWAS <- function(configuration, raw_cache = NULL) {
     cat("Running analysis for continuous variables...\n")
     results <- generator_standardized_continuous(
       configuration, raw, configuration$linear_configuration$callback, cl,
-      limit = limit
+      limit = configuration$limit
     )
     results <- clean_and_save("linear", results, configuration)
     cat("DONE\n")

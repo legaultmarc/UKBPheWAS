@@ -86,6 +86,7 @@ SkipLinear <- function() {
 #' @export phewas_configuration
 phewas_configuration <- function(
   db_password = NULL,
+  limit = NULL,
   ncpus = 10,
   xs = NULL,
   model_rhs = "",
@@ -155,6 +156,7 @@ phewas_configuration <- function(
 
   config <- list(
     db_password = db_password,
+    limit = limit,
     ncpus = ncpus,
     xs = xs,
     model_rhs = model_rhs,
