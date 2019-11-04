@@ -13,8 +13,6 @@ do_logistic <- function(configuration, data) {
     return(NULL)
   }
 
-  cat(paste0("binary n cases: ", n_cases, "\n"))
-
   data$y$case <- 1
 
   # Join the cases with the covariables.

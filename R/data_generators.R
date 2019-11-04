@@ -25,6 +25,7 @@ generator_icd10_three_chars <- function(
     .combine = "rbind",
     .packages = c("UKBPheWAS", "broom")
   ) %dopar% {
+
     # Identify cases.
     # It's more efficient to only represent cases, so we send that to the
     # callback who should code controls if needed.
@@ -138,6 +139,7 @@ generator_icd10_blocks <- function(
   }
 
   return(results)
+
 }
 
 
