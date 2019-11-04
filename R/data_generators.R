@@ -1,6 +1,10 @@
-# Others are raw and blocks.
-# Generators call callbacks for every result and should implement the
-# parallelism.
+library(doParallel)
+library(foreach)
+
+#' Generate phenotypes based on 3 character ICD10 codes.
+#'
+#' @import doParallel
+#' @import foreach
 generator_icd10_three_chars <- function(
   configuration, raw_data, callback, cl, limit=NULL
 ) {
@@ -51,6 +55,9 @@ generator_icd10_three_chars <- function(
 }
 
 
+#' Generate phenotypes based on raw ICD10 codes.
+#'
+#' @import doParallel
 generator_icd10_raw <- function(
   configuration, raw_data, callback, cl, limit=NULL
 ) {
@@ -97,6 +104,9 @@ generator_icd10_raw <- function(
 }
 
 
+#' Generate phenotypes based on ICD10 blocks.
+#'
+#' @import doParallel
 generator_icd10_blocks <- function(
   configuration, raw_data, callback, cl, limit=NULL
 ) {

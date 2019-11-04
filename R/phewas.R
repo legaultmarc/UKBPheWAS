@@ -1,9 +1,12 @@
 library(doParallel)
+library(parallel)
 library(foreach)
 
 
 #' Main method to run pheWAS
 #'
+#' @import parallel
+#' @import doParallel
 #' @export runPheWAS
 runPheWAS <- function(configuration, raw_cache = NULL) {
 
