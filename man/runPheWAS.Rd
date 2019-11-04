@@ -2,16 +2,10 @@
 % Please edit documentation in R/phewas.R
 \name{runPheWAS}
 \alias{runPheWAS}
-\title{Main function to run a pheWAS.}
+\title{Main method to run pheWAS}
 \usage{
-runPheWAS(con, configuration)
-}
-\arguments{
-\item{con}{A database connection to the UK Biobank (StatGen format).}
-
-\item{configuration}{A configuration object.}
+runPheWAS(configuration, raw_cache = NULL)
 }
 \description{
-This function takes a configuration object and dispatches to the relevant
-function.
+Main method to run pheWAS
 }
