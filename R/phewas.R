@@ -53,8 +53,6 @@ runPheWAS <- function(configuration, raw_cache = NULL) {
     cat("DONE!\n")
 
     # ICD10 blocks
-    # TODO: This is very slow because of the sapply. I should write a
-    # vectorized implementation at some point.
     cat("Running analysis based on ICD10 blocks...\n")
     results <- generator_icd10_blocks(
       configuration, raw, configuration$binary_configuration$callback, cl,

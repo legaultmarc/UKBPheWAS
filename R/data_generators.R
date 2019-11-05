@@ -35,6 +35,10 @@ generator_icd10_three_chars <- function(
     # callback who should code controls if needed.
     cases <- unique(data[substr(data$diag_icd10, 1, 3) == code, "eid"])
 
+    if (length(cases) < configuration$binary_configuration$min_num_cases) {
+      return(NULL)
+    }
+
     # Try to find a label in the metadata.
     label <- icd10[icd10$coding_key == code, "meaning"]
     if (identical(label, character(0))) {
@@ -85,6 +89,10 @@ generator_icd10_raw <- function(
     code_len <- nchar(code)
     cases <- unique(data[substr(data$diag_icd10, 1, code_len) == code, "eid"])
 
+    if (length(cases) < configuration$binary_configuration$min_num_cases) {
+      return(NULL)
+    }
+
     label <- icd10[icd10$coding_key == code, "meaning"]
     if (identical(label, character(0))) {
         label <- code
@@ -133,10 +141,12 @@ generator_icd10_blocks <- function(
     block <- blocks[i, ]
 
     cases <- data[
-      sapply(data$diag_icd10, function(code) {
-        code_in_range(code, block$left, block$right)
-      }),
-    ]["eid"]
+      codes_in_range(data$diag_icd10, block$left, block$right), "eid"
+    ]
+
+    if (length(cases) < configuration$binary_configuration$min_num_cases) {
+      return(NULL)
+    }
 
     cur_data <- list(
       id = paste0(block$left, "-", block$right),
@@ -197,7 +207,7 @@ generator_standardized_continuous <- function(
     callback(configuration, out)
 
   }
-  
+
   return(results)
 
 }

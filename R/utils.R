@@ -98,11 +98,23 @@ extract_raw_data <- function(configuration) {
 
   # Extract information on diseases if required.
   if (should_do_binary(configuration)) {
-    data$diseases <- get_full_records(
+    diseases <- get_full_records(
       con,
       configuration$binary_configuration$include_secondary_hospit,
       configuration$binary_configuration$include_death_records
     )
+
+    # We exclude some chapters corresponding to diseases that are
+    # 'external'.
+    # TODO: Eventually, I will add other exclusions for neoplasm and use the
+    # linkage with the cancer registry.
+    excluded_chapters <- c("S", "T", "U", "V", "W", "X", "Y", "Z")
+    diseases <- diseases[
+      !(substr(diseases$diag_icd10, 1, 1) %in% excluded_chapters),
+    ]
+
+    data$diseases <- diseases
+
   }
 
   if (should_do_linear(configuration)) {

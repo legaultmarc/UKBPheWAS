@@ -4,8 +4,8 @@
 \alias{phewas_configuration}
 \title{Helper function to create Configuration objects.}
 \usage{
-phewas_configuration(db_password = NULL, ncpus = 10, xs = NULL,
-  model_rhs = "", output_prefix = "phewas",
+phewas_configuration(db_password = NULL, limit = NULL, ncpus = 10,
+  xs = NULL, model_rhs = "", output_prefix = "phewas",
   continuous_variables_path = "/data/projects/uk_biobank/data/reports/SGR-2094/",
   voi_idx = NULL, voi_name = NULL, results_filter = NULL)
 }
