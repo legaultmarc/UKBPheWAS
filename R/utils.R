@@ -117,6 +117,7 @@ extract_raw_data <- function(configuration) {
 
   }
 
+  # Extract information on continuous traits.
   if (should_do_linear(configuration)) {
     data$continuous <- read.csv(
       paste0(

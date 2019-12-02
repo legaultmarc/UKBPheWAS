@@ -152,7 +152,7 @@ prepare_formula <- function(outcome_label, configuration, as.char = FALSE) {
 #' Do the linear regression.
 do_linear <- function(configuration, data) {
   y <- data$y
-  df <- inner_join_y_x(y, configuration@xs)
+  df <- inner_join_y_x(y, configuration$xs)
 
   if (nrow(df) == 0) {
     return(NULL)
