@@ -51,7 +51,15 @@ generator_icd10_three_chars <- function(
       y = data.frame(sample_id = cases)
     )
 
-    callback(configuration, cur_data)
+    # If cancer code, we pass the individuals to exclude to the callback.
+    if (is_cancer_code(code)) {
+      callback(
+        configuration, cur_data, exclude = raw_data$cancer_excl_from_controls
+      )
+    }
+    else {
+      callback(configuration, cur_data)
+    }
 
   }
 
@@ -104,7 +112,15 @@ generator_icd10_raw <- function(
       y = data.frame(sample_id = cases)
     )
 
-    callback(configuration, cur_data)
+    # If cancer code, we pass the individuals to exclude to the callback.
+    if (is_cancer_code(code)) {
+      callback(
+        configuration, cur_data, exclude = raw_data$cancer_excl_from_controls
+      )
+    }
+    else {
+      callback(configuration, cur_data)
+    }
 
   }
 
@@ -154,7 +170,15 @@ generator_icd10_blocks <- function(
       y = data.frame(sample_id = cases)
     )
 
-    callback(configuration, cur_data)
+    # If cancer code, we pass the individuals to exclude to the callback.
+    if (is_cancer_code(block$left)) {
+      callback(
+        configuration, cur_data, exclude = raw_data$cancer_excl_from_controls
+      )
+    }
+    else {
+      callback(configuration, cur_data)
+    }
 
   }
 

@@ -3,8 +3,10 @@
 #' Do the actual regression from the current cases and the prepared covariates
 #' dataframe.
 #'
+#' This function is a callback for data generators.
+#'
 #' @seealso fastglm
-do_logistic <- function(configuration, data) {
+do_logistic <- function(configuration, data, exclude = NULL) {
   binary_conf <- configuration$binary_configuration
 
   # Check if there are enough cases to test.
@@ -13,20 +15,15 @@ do_logistic <- function(configuration, data) {
     return(NULL)
   }
 
-  data$y$case <- 1
-
   # Join the cases with the covariables.
-  # We assume the first column in the XS matrix is sample IDs.
-  # This is a right outer join where we assume that samples not in the
-  # cur_cases df are controls.
-  df <- merge(
-    data$y, configuration$xs,
-    by.x = "sample_id", by.y = names(configuration$xs)[1],
-    all.x = FALSE, all.y = TRUE
-  )
+  # This also sets case status. Individuals are assumed control if not cases.
+  df <- join_y_x_from_cases(data$y, configuration$xs)
 
-  # Assume individuals not in the "cases" DF are controls.
-  df[is.na(df$case), "case"] <- 0
+  # Set excluded individuals if needed. This is used to cleanup controls
+  # (remove individuals with evidence of disease) for cancer codes.
+  if (!is.null(exclude)) {
+    df[df$sample_id %in% exclude, "case"] <- NA
+  }
 
   # Drop the missing values.
   df <- df[complete.cases(df), ]
@@ -199,12 +196,18 @@ do_lm_F_test <- function(configuration, data) {
 }
 
 
-do_logistic_LRT_test <- function(configuration, data) {
+do_logistic_LRT_test <- function(configuration, data, exclude = NULL) {
   y <- data$y
   df <- join_y_x_from_cases(y, configuration$xs)
 
+  # Set excluded individuals if needed.
+  if (!is.null(exclude)) {
+    df[df$sample_id %in% exclude, "case"] <- NA
+  }
+
   n_cases <- sum(df[, "case"] == 1)
   n_controls <- sum(df[, "case"] == 0)
+  n_excl_from_ctrls <- sum(is.na(df[, "case"]))
 
   if (nrow(df) == 0) { return(NULL) }
   lrt <- gof(df, "case", configuration, "binary")
@@ -214,6 +217,7 @@ do_logistic_LRT_test <- function(configuration, data) {
     outcome_label = data$label,
     n_cases = n_cases,
     n_controls = n_controls,
+    n_excl_from_ctrls = n_excl_from_ctrls,
     prevalence = n_cases / (n_cases + n_controls),
     resid_deviance_base = lrt[1, 2],
     resid_deviance_augmented = lrt[2, 2],

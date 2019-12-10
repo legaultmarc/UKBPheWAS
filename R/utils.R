@@ -90,6 +90,48 @@ get_covariables_hcn4_project <- function(con) {
 }
 
 
+get_cancer_data <- function(con) {
+  # Get cancer ICD10 codes.
+  query <- dbSendQuery(
+    con,
+    paste0("select distinct sample_id as eid, value as diag_icd10 ",
+           "from variable_categorical")
+  )
+  cases_info <- dbFetch(query)
+  dbClearResult(query)
+
+  # Also find individuals with no ICD10 that self-report a cancer or that
+  # have a cancer ICD9 code and return them as cancer_excl_from_controls.
+  query <- dbSendQuery(
+    con,
+    paste0(
+      "select distinct sample_id ",
+      "from variable_categorical where variable_id = 40013 ",  # ICD9
+      "union ",
+      "select sample_id ",
+      "from variable_categorical where variable_id = 20001"  # Self-reported
+    )
+  )
+
+  excl_from_ctrls = dbFetch(query)$sample_id
+  dbClearResult(query)
+
+  excl_from_ctrls <- excl_from_ctrls[
+    !(excl_from_ctrls %in% cases_info$sample_id)
+  ]
+
+  warning(paste0(
+    "Recorded ", length(excl_from_ctrls), " individuals to remove from ",
+    "cancer controls (because of ICD9 code or self-report)."
+  ))
+
+  list(
+    cancer_case_data = cases_info,
+    cancer_excl_from_controls = excl_from_ctrls
+  )
+}
+
+
 extract_raw_data <- function(configuration) {
 
   con <- get_ukb_connection(configuration$db_password)
@@ -105,15 +147,22 @@ extract_raw_data <- function(configuration) {
     )
 
     # We exclude some chapters corresponding to diseases that are
-    # 'external'.
-    # TODO: Eventually, I will add other exclusions for neoplasm and use the
-    # linkage with the cancer registry.
-    excluded_chapters <- c("S", "T", "U", "V", "W", "X", "Y", "Z")
+    # 'external' or cancer as we rely on the cancer registry instead.
+    excluded_chapters <- c("C", "D", "S", "T", "U", "V", "W", "X", "Y", "Z")
     diseases <- diseases[
       !(substr(diseases$diag_icd10, 1, 1) %in% excluded_chapters),
     ]
 
     data$diseases <- diseases
+
+    # Also extract information on cancer data from the cancer registry.
+    cancer <- get_cancer_data(con)
+
+    # Merge the ICD10 codes.
+    data$diseases <- rbind(data$diseases, cancer$cancer_case_data)
+
+    # But also remember the exclusions from controls.
+    data$cancer_excl_from_controls <- cancer$cancer_excl_from_controls
 
   }
 

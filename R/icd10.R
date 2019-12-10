@@ -43,3 +43,11 @@ codes_in_range <- function(codes, left, right) {
 
     gt_left & lt_right
 }
+
+#' Check if ICD10 code is a cancer code.
+is_cancer_code <- function(code) {
+  chapter <- substr(code, 1, 1)
+  num <- as.numeric(substr(code, 2, 3))
+
+  chapter == "C" || (chapter == "D" && num <= 48)
+}
