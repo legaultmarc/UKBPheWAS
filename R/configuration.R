@@ -21,23 +21,11 @@ DoBinary <- function(
 
 #' @export DoBinaryLRT
 DoBinaryLRT <- function(
-  augmented_variables,
-
-  include_death_records = TRUE,
-  include_secondary_hospit = TRUE,
-  min_num_cases = 50
+  augmented_variables, ...
 ) {
-  binary_config <- list(
-    include_death_records = include_death_records,
-    include_secondary_hospit = include_secondary_hospit,
-    min_num_cases = min_num_cases,
-
-    augmented_variables = augmented_variables,
-
-    callback = do_logistic_LRT_test
-  )
-
-  class(binary_config) <- "BinaryConfig"
+  binary_config <- DoBinary(...)
+  binary_config$augmented_variables = augmented_variables
+  binary_config$callback = do_logistic_LRT_test
 
   binary_config
 }

@@ -95,7 +95,7 @@ get_cancer_data <- function(con) {
   query <- dbSendQuery(
     con,
     paste0("select distinct sample_id as eid, value as diag_icd10 ",
-           "from variable_categorical")
+           "from variable_categorical where variable_id = 40006")
   )
   cases_info <- dbFetch(query)
   dbClearResult(query)
@@ -117,7 +117,7 @@ get_cancer_data <- function(con) {
   dbClearResult(query)
 
   excl_from_ctrls <- excl_from_ctrls[
-    !(excl_from_ctrls %in% cases_info$sample_id)
+    !(excl_from_ctrls %in% cases_info$eid)
   ]
 
   warning(paste0(

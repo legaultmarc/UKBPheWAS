@@ -53,14 +53,15 @@ generator_icd10_three_chars <- function(
 
     # If cancer code, we pass the individuals to exclude to the callback.
     if (is_cancer_code(code)) {
-      callback(
+      out <- callback(
         configuration, cur_data, exclude = raw_data$cancer_excl_from_controls
       )
     }
     else {
-      callback(configuration, cur_data)
+      out <- callback(configuration, cur_data)
     }
 
+    out
   }
 
   return(results)
@@ -156,9 +157,9 @@ generator_icd10_blocks <- function(
 
     block <- blocks[i, ]
 
-    cases <- data[
+    cases <- unique(data[
       codes_in_range(data$diag_icd10, block$left, block$right), "eid"
-    ]
+    ])
 
     if (length(cases) < configuration$binary_configuration$min_num_cases) {
       return(NULL)
@@ -172,14 +173,15 @@ generator_icd10_blocks <- function(
 
     # If cancer code, we pass the individuals to exclude to the callback.
     if (is_cancer_code(block$left)) {
-      callback(
+      out <- callback(
         configuration, cur_data, exclude = raw_data$cancer_excl_from_controls
       )
     }
     else {
-      callback(configuration, cur_data)
+      out <- callback(configuration, cur_data)
     }
 
+    out
   }
 
   return(results)

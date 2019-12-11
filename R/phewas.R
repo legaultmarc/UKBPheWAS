@@ -8,12 +8,16 @@ library(foreach)
 #' @import parallel
 #' @import doParallel
 #' @export runPheWAS
-runPheWAS <- function(configuration, raw_cache = NULL) {
+runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
 
   log_configuration(configuration)
 
   if (is.null(raw_cache)) {
     raw <- extract_raw_data(configuration)
+
+    if (build_cache) {
+      saveRDS(raw, file = "_UKBPheWAS_cache.rds.gz", compress = "gzip")
+    }
   }
   else {
     cat("Using cached raw data.\n")

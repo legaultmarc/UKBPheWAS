@@ -25,11 +25,11 @@ do_logistic <- function(configuration, data, exclude = NULL) {
     df[df$sample_id %in% exclude, "case"] <- NA
   }
 
-  # Drop the missing values.
-  df <- df[complete.cases(df), ]
-
   # Prepare the model.
   formula <- prepare_formula("case", configuration)
+
+  # We remove the missing values based on the model frame.
+  df <- na.omit(model.frame(formula, data = df))
 
   if (binary_conf$use_fastglm) {
     # Use the LLT method as it is one of the fastest.
@@ -205,12 +205,28 @@ do_logistic_LRT_test <- function(configuration, data, exclude = NULL) {
     df[df$sample_id %in% exclude, "case"] <- NA
   }
 
-  n_cases <- sum(df[, "case"] == 1)
-  n_controls <- sum(df[, "case"] == 0)
+  n_cases <- sum(df[, "case"] == 1, na.rm = TRUE)
+  n_controls <- sum(df[, "case"] == 0, na.rm = TRUE)
   n_excl_from_ctrls <- sum(is.na(df[, "case"]))
 
   if (nrow(df) == 0) { return(NULL) }
-  lrt <- gof(df, "case", configuration, "binary")
+
+  if (configuration$binary_configuration$use_fastglm) {
+    lrt <- gof(df, "case", configuration, "fastglm")
+
+    resid_deviance_base <- lrt$resid_deviance_base
+    resid_deviance_augmented <- lrt$resid_deviance_augmented
+    deviance <- lrt$deviance
+    p <- lrt$p
+  }
+  else {
+    lrt <- gof(df, "case", configuration, "binary")
+
+    resid_deviance_base <- lrt[1, 2]
+    resid_deviance_augmented <- lrt[2, 2]
+    deviance <- lrt[2, 4]
+    p <- lrt[2, 5]
+  }
 
   return(data.frame(
     outcome_id = data$id,
@@ -219,11 +235,27 @@ do_logistic_LRT_test <- function(configuration, data, exclude = NULL) {
     n_controls = n_controls,
     n_excl_from_ctrls = n_excl_from_ctrls,
     prevalence = n_cases / (n_cases + n_controls),
-    resid_deviance_base = lrt[1, 2],
-    resid_deviance_augmented = lrt[2, 2],
-    deviance = lrt[2, 4],
-    p = lrt[2, 5]
+    resid_deviance_base = resid_deviance_base,
+    resid_deviance_augmented = resid_deviance_augmented,
+    deviance = deviance,
+    p = p
   ))
+}
+
+
+#' Analysis of deviance test for a fit based on fastglm.
+fastglm_anova <- function(base, augmented) {
+
+  d_dev <- base$deviance - augmented$deviance
+  d_df <- base$df.residual - augmented$df.residual
+  p <- 1 - pchisq(d_dev, d_df)
+
+  list(
+    resid_deviance_base = base$deviance,
+    resid_deviance_augmented = augmented$deviance,
+    deviance = d_dev,
+    p = p
+  )
 }
 
 
@@ -245,6 +277,26 @@ gof <- function(df, outcome, configuration, mode) {
       anova(..., test = "LRT")
     }
   }
+
+  else if (mode == "fastglm") {
+    aug <- configuration$binary_configuration$augmented_variables
+
+    fitter <- function(formula, data) {
+      fastglm::fastglm(
+        x = model.matrix(formula, data = data),
+        y = data$case,
+        data = data,
+        family = binomial(),
+        method = 2
+      )
+    }
+
+    stat_test <- function(fit_base, fit_aug) {
+      fastglm_anova(fit_base, fit_aug)
+    }
+
+  }
+
   else {
     stop("Unexpected mode for GOF.")
   }
@@ -260,6 +312,9 @@ gof <- function(df, outcome, configuration, mode) {
 
   base_model_formula <- as.formula(base_model_formula)
   augmented_model_formula <- as.formula(augmented_model_formula)
+
+  # Remove missing values according to the augmented model.
+  df <- na.omit(model.frame(augmented_model_formula, data = df))
 
   fit_base <- fitter(base_model_formula, data = df)
   fit_aug <- fitter(augmented_model_formula, data = df)
@@ -286,6 +341,7 @@ join_y_x <- function(y, x, all.x, all.y) {
 
   if (nrow(df) == 0) {
     warning("Join with covariables had no overlap.")
+    return(NULL)
   }
 
   return(df)
@@ -303,6 +359,8 @@ join_y_x_from_cases <- function(cases, x) {
   cases$case <- 1
   df <- join_y_x(cases, x, all.x = FALSE, all.y = TRUE)
   df[is.na(df$case), "case"] <- 0
+
+  stopifnot(nrow(df) == nrow(x))
 
   return(df)
 }
