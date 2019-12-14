@@ -28,6 +28,18 @@ get_full_records <- function(
 }
 
 
+#' Get curated cv_endpoints.
+get_cv_endpoints <- function(con) {
+
+  query <- dbSendQuery(con, query_get_cv_endpoints_)
+  res <- dbFetch(query)
+  dbClearResult(query)
+
+  res
+
+}
+
+
 #' Create a SQL string with an appropriate FROM statement to obtain cases.
 #'
 #' Specifically the generated table will have two columns: eid and diag_icd10
@@ -163,6 +175,9 @@ extract_raw_data <- function(configuration) {
 
     # But also remember the exclusions from controls.
     data$cancer_excl_from_controls <- cancer$cancer_excl_from_controls
+
+    # Last piece of data is for the manually defined cv_endpoints:
+    data$cv_endpoints <- get_cv_endpoints(con)
 
   }
 

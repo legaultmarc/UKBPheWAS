@@ -38,6 +38,15 @@ runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
       ))
     }
 
+    # CV Endpoints
+    cat("Running analysis for manual CV endpoints...\n")
+    results <- generator_cv_endpoints(
+      configuration, raw, configuration$binary_configuration$callback, cl,
+      limit = configuration$limit
+    )
+    results <- clean_and_save("cv_endpoints", results, configuration)
+    cat("DONE!\n")
+
     # 3 character codes logistic.
     cat("Running analysis based on 3 character codes...\n")
     results <- generator_icd10_three_chars(

@@ -237,3 +237,29 @@ generator_standardized_continuous <- function(
   return(results)
 
 }
+
+
+#' Generator for the manually defined cv_endpoints.
+generator_cv_endpoints <- function(
+  configuration, raw_data, callback, cl, limit=NULL
+) {
+  data <- raw_data$cv_endpoints
+
+  results <- NULL
+  for (col in names(data)[-1]) {
+    cur_data <- data[data[col] == 1, ]["sample_id"]
+
+    res <- callback(
+      configuration,
+      list(
+        id = paste0("cv_endpoint_", col),
+        label = col,
+        y = cur_data
+      )
+    )
+
+    results <- rbind(results, res)
+  }
+
+  results
+}
