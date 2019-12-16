@@ -3,13 +3,15 @@ DoBinary <- function(
   include_death_records = TRUE,
   include_secondary_hospit = TRUE,
   min_num_cases = 50,
-  use_fastglm = TRUE
+  use_fastglm = TRUE,
+  skip_icd10_raw = FALSE
 ) {
   binary_config <- list(
     include_secondary_hospit = include_secondary_hospit,
     include_death_records = include_death_records,
     min_num_cases = min_num_cases,
     use_fastglm = use_fastglm,
+    skip_icd10_raw = skip_icd10_raw,
     callback = do_logistic
   )
 

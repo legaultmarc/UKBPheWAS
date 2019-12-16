@@ -3,6 +3,22 @@ library(parallel)
 library(foreach)
 
 
+bin_data_generators <- list(
+  cv_endpoints = list(
+    gen = generator_cv_endpoints
+  ),
+  icd10_three_chars = list(
+    gen = generator_icd10_three_chars
+  ),
+  icd10_blocks = list(
+    gen = generator_icd10_blocks
+  ),
+  icd10_raw = list(
+    gen = generator_icd10_raw
+  )
+)
+
+
 #' Main method to run pheWAS
 #'
 #' @import parallel
@@ -10,8 +26,10 @@ library(foreach)
 #' @export runPheWAS
 runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
 
+  # Log the configuration summarizing the analysis.
   log_configuration(configuration)
 
+  # Load or create the data cache if needed.
   if (is.null(raw_cache)) {
     raw <- extract_raw_data(configuration)
 
@@ -38,41 +56,32 @@ runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
       ))
     }
 
-    # CV Endpoints
-    cat("Running analysis for manual CV endpoints...\n")
-    results <- generator_cv_endpoints(
-      configuration, raw, configuration$binary_configuration$callback, cl,
-      limit = configuration$limit
-    )
-    results <- clean_and_save("cv_endpoints", results, configuration)
-    cat("DONE!\n")
+    # Skip the raw analysis of ICD10 codes if needed.
+    # For now we can only "easily" skip this because it is the heaviest
+    # computationally and the noisiest in terms of interpretations.
+    if (configuration$binary_configuration$skip_icd10_raw) {
+      bin_data_generators <- bin_data_generators[
+        names(bin_data_generators) != "icd10_raw"
+      ]
+    }
 
-    # 3 character codes logistic.
-    cat("Running analysis based on 3 character codes...\n")
-    results <- generator_icd10_three_chars(
-      configuration, raw, configuration$binary_configuration$callback, cl,
-      limit = configuration$limit
-    )
-    results <- clean_and_save("3chars", results, configuration)
-    cat("DONE!\n")
+    for (gen_name in names(bin_data_generators)) {
 
-    # Raw codes
-    cat("Running analysis based on raw ICD10 codes...\n")
-    results <- generator_icd10_raw(
-      configuration, raw, configuration$binary_configuration$callback, cl,
-      limit = configuration$limit
-    )
-    results <- clean_and_save("raw", results, configuration)
-    cat("DONE!\n")
+      cat(paste0("Running analysis for ", gen_name, "\n"))
 
-    # ICD10 blocks
-    cat("Running analysis based on ICD10 blocks...\n")
-    results <- generator_icd10_blocks(
-      configuration, raw, configuration$binary_configuration$callback, cl,
-      limit = configuration$limit
-    )
-    results <- clean_and_save("blocks", results, configuration)
-    cat("DONE!\n")
+      results <- bin_data_generators[[gen_name]]$gen(
+        configuration, raw, configuration$binary_configuration$callback, cl,
+        limit = configuration$limit
+      )
+
+      results <- clean_and_save(gen_name, results, configuration)
+
+      remove(results)
+      gc()
+
+      cat("DONE!\n")
+
+    }
 
   }
 
@@ -111,6 +120,10 @@ runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
 
 
 log_configuration <- function(config) {
+
+  if (!is.null(config$db_password)) {
+    config$db_password <- "**********"
+  }
 
   print(str(config))
 

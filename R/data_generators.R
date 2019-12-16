@@ -61,6 +61,10 @@ generator_icd10_three_chars <- function(
       out <- callback(configuration, cur_data)
     }
 
+    remove(cases)
+    remove(cur_data)
+    gc()
+
     out
   }
 
@@ -115,13 +119,19 @@ generator_icd10_raw <- function(
 
     # If cancer code, we pass the individuals to exclude to the callback.
     if (is_cancer_code(code)) {
-      callback(
+      out <- callback(
         configuration, cur_data, exclude = raw_data$cancer_excl_from_controls
       )
     }
     else {
-      callback(configuration, cur_data)
+      out <- callback(configuration, cur_data)
     }
+
+    remove(cases)
+    remove(cur_data)
+    gc()
+
+    out
 
   }
 
@@ -181,6 +191,10 @@ generator_icd10_blocks <- function(
       out <- callback(configuration, cur_data)
     }
 
+    remove(cases)
+    remove(cur_data)
+    gc()
+
     out
   }
 
@@ -224,13 +238,19 @@ generator_standardized_continuous <- function(
     # Standardize
     y$y <- (y$y - mean(y$y)) / sd(y$y)
 
-    out <- list(
+    cur_data <- list(
       id = paste0("cont_v", meta$ukbphewas_id),
       label = meta$variable,
       y = y
     )
 
-    callback(configuration, out)
+    out <- callback(configuration, cur_data)
+
+    remove(y)
+    remove(cur_data)
+    gc()
+
+    out
 
   }
 
