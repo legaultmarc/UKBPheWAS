@@ -1,7 +1,6 @@
 library(doParallel)
 library(foreach)
 
-
 #' Generate phenotypes based on 3 character ICD10 codes.
 #'
 #' @import doParallel
@@ -9,9 +8,6 @@ library(foreach)
 generator_icd10_three_chars <- function(
   configuration, raw_data, callback, cl, limit=NULL
 ) {
-  cl <- makeCluster(configuration$ncpus)
-  registerDoParallel(cl)
-
   # Data frame with "eid" and "diag_icd10"
   data <- raw_data$diseases
 
@@ -68,8 +64,6 @@ generator_icd10_three_chars <- function(
     out
   }
 
-  stopCluster(cl)
-
   return(results)
 }
 
@@ -80,10 +74,6 @@ generator_icd10_three_chars <- function(
 generator_icd10_raw <- function(
   configuration, raw_data, callback, cl, limit=NULL
 ) {
-
-  cl <- makeCluster(configuration$ncpus)
-  registerDoParallel(cl)
-
   # Data frame with "eid" and "diag_icd10"
   data <- raw_data$diseases
 
@@ -135,8 +125,6 @@ generator_icd10_raw <- function(
 
   }
 
-  stopCluster(cl)
-
   return(results)
 }
 
@@ -147,9 +135,6 @@ generator_icd10_raw <- function(
 generator_icd10_blocks <- function(
   configuration, raw_data, callback, cl, limit=NULL
 ) {
-  cl <- makeCluster(configuration$ncpus)
-  registerDoParallel(cl)
-
   # Data frame with "eid" and "diag_icd10"
   data <- raw_data$diseases
 
@@ -199,8 +184,6 @@ generator_icd10_blocks <- function(
     out
   }
 
-  stopCluster(cl)
-
   return(results)
 
 }
@@ -210,9 +193,6 @@ generator_icd10_blocks <- function(
 generator_standardized_continuous <- function(
   configuration, raw_data, callback, cl, limit=NULL
 ) {
-
-  cl <- makeCluster(configuration$ncpus)
-  registerDoParallel(cl)
 
   n_pheno <- nrow(raw_data$continuous_metadata)
 
@@ -253,8 +233,6 @@ generator_standardized_continuous <- function(
     callback(configuration, out)
 
   }
-
-  stopCluster(cl)
 
   return(results)
 
