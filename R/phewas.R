@@ -24,9 +24,6 @@ runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
     raw <- raw_cache
   }
 
-  cl <- makeCluster(configuration$ncpus)
-  registerDoParallel(cl)
-
   # Models for binary outcomes.
   if (should_do_binary(configuration)) {
 
@@ -104,8 +101,6 @@ runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
   else {
     cat("SKIPPING models for linear outcomes.\n")
   }
-
-  stopCluster(cl)
 
 }
 
