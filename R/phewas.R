@@ -24,7 +24,7 @@ runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
     raw <- raw_cache
   }
 
-  cl <- makeCluster(configuration$ncpus)
+  cl <- makeForkCluster(configuration$ncpus)
   registerDoParallel(cl)
 
   # Models for binary outcomes.
