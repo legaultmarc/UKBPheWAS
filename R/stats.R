@@ -9,12 +9,6 @@
 do_logistic <- function(configuration, data, exclude = NULL) {
   binary_conf <- configuration$binary_configuration
 
-  # Check if there are enough cases to test.
-  n_cases <- nrow(data$y)
-  if (n_cases < binary_conf$min_num_cases || n_cases == 0) {
-    return(NULL)
-  }
-
   # Join the cases with the covariables.
   # This also sets case status. Individuals are assumed control if not cases.
   df <- join_y_x_from_cases(data$y, configuration$xs)
