@@ -4,8 +4,13 @@
 \alias{generator_icd10_three_chars}
 \title{Generate phenotypes based on 3 character ICD10 codes.}
 \usage{
-generator_icd10_three_chars(configuration, raw_data, callback, cl,
-  limit = NULL)
+generator_icd10_three_chars(
+  configuration,
+  raw_data,
+  callback,
+  cl,
+  limit = NULL
+)
 }
 \description{
 Generate phenotypes based on 3 character ICD10 codes.

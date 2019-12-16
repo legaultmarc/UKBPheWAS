@@ -4,11 +4,14 @@
 \alias{do_logistic}
 \title{Do the logistic regression.}
 \usage{
-do_logistic(configuration, data)
+do_logistic(configuration, data, exclude = NULL)
 }
 \description{
 Do the actual regression from the current cases and the prepared covariates
 dataframe.
+}
+\details{
+This function is a callback for data generators.
 }
 \seealso{
 fastglm

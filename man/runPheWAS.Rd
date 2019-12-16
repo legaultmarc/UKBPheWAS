@@ -4,7 +4,7 @@
 \alias{runPheWAS}
 \title{Main method to run pheWAS}
 \usage{
-runPheWAS(configuration, raw_cache = NULL)
+runPheWAS(configuration, build_cache = FALSE, raw_cache = NULL)
 }
 \description{
 Main method to run pheWAS

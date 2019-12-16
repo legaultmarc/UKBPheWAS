@@ -1,6 +1,6 @@
 Package: UKBPheWAS
 Title: Code and utilities to run pheWAS analyses on the UK Biobank
-Version: 0.1
+Version: 1.0
 Authors@R: 
     person(given = "Marc-André",
            family = "Legault",
@@ -12,7 +12,7 @@ Encoding: UTF-8
 LazyData: true
 Depends:
     R (>= 3.5)
-RoxygenNote: 6.1.1
+RoxygenNote: 7.0.2
 Suggests: 
     knitr,
     rmarkdown

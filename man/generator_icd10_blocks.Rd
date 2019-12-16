@@ -4,8 +4,7 @@
 \alias{generator_icd10_blocks}
 \title{Generate phenotypes based on ICD10 blocks.}
 \usage{
-generator_icd10_blocks(configuration, raw_data, callback, cl,
-  limit = NULL)
+generator_icd10_blocks(configuration, raw_data, callback, cl, limit = NULL)
 }
 \description{
 Generate phenotypes based on ICD10 blocks.
