@@ -139,6 +139,61 @@ generator_icd10_raw <- function(
 }
 
 
+#' Generate self reported diseases.
+#'
+#' @import doParallel
+generator_self_reported_diseases <- function(
+  configuration, raw_data, callback, cl, limit=NULL
+) {
+  data <- raw_data$self_reported_diseases
+
+  tree <- UKBPheWAS::self_reported_diseases_tree
+  nodes <- unique(tree$node_id)
+
+  if (!is.null(limit)) {
+    warning(paste0(
+      "Limiting the number of self reported diseases to ", limit, ". This ",
+      "should not be used routinely, mostly useful for testing."
+    ))
+    nodes <- nodes[1:limit]
+  }
+
+  results <- foreach(
+    node = nodes,
+    .combine = "rbind",
+    .packages = c("UKBPheWAS", "broom")
+  ) %dopar% {
+
+    # Get all codings for this node or children.
+    child_nodes <- sr_get_disease_child_nodes(node)
+    codes <- sr_node_ids_to_codings(child_nodes)
+
+    cases <- unique(data[data$disease_code %in% codes, "sample_id"])
+    disease_name <- tree[tree$node_id == node, "meaning"]
+
+    if (length(cases) < configuration$binary_configuration$min_num_cases) {
+      return(NULL)
+    }
+
+    cur <- list(
+      id = node,
+      label = disease_name,
+      y = data.frame(sample_id = cases)
+    )
+
+    out <- callback(configuration, cur)
+
+    remove(cases)
+    remove(cur)
+    gc()
+
+    out
+  }
+
+  return(results)
+}
+
+
 #' Generate phenotypes based on ICD10 blocks.
 #'
 #' @import doParallel

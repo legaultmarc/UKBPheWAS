@@ -40,6 +40,33 @@ get_cv_endpoints <- function(con) {
 }
 
 
+#' Get self reported diseases.
+get_self_reported_diseases <- function(con) {
+
+  sql <- paste0(
+    "select distinct ",
+    "  vc.sample_id, ",
+    "  vc.value as disease_code, ",
+    "  meaning as disease ",
+    "from ",
+    "  variable_categorical vc ",
+    "  inner join ( ",
+    "    select coding_id, coding_key, meaning ",
+    "    from data_coding where coding_id = 6 ",
+    "  ) dc on vc.value = dc.coding_key ",
+    "where ",
+    "  vc.variable_id = 20002"
+  )
+
+  query <- dbSendQuery(con, sql)
+  res <- dbFetch(query)
+  dbClearResult(query)
+
+  res
+
+}
+
+
 #' Create a SQL string with an appropriate FROM statement to obtain cases.
 #'
 #' Specifically the generated table will have two columns: eid and diag_icd10
@@ -176,8 +203,11 @@ extract_raw_data <- function(configuration) {
     # But also remember the exclusions from controls.
     data$cancer_excl_from_controls <- cancer$cancer_excl_from_controls
 
-    # Last piece of data is for the manually defined cv_endpoints:
+    # Manually defined cv_endpoints:
     data$cv_endpoints <- get_cv_endpoints(con)
+
+    # Self-reported diseases (any time):
+    data$self_reported_diseases <- get_self_reported_diseases(con)
 
   }
 
@@ -227,4 +257,37 @@ clean_and_save <- function(analysis_label, results, configuration) {
 
     write.csv(results, filename, row.names = FALSE)
   }
+}
+
+
+sr_node_ids_to_codings <- function(node_ids) {
+  tree <- UKBPheWAS::self_reported_diseases_tree
+
+  codings <- unique(tree[tree$node_id %in% node_ids, "coding"])
+
+  codings[codings != -1]
+}
+
+
+sr_get_disease_child_nodes <- function(root) {
+  tree <- UKBPheWAS::self_reported_diseases_tree
+
+  children <- tree[
+    tree$parent_id == root, 
+  ]
+
+  if (nrow(children) == 0) {
+    return(root)
+  }
+
+  # We recurse down the children.
+  acc <- root
+  for (i in 1:nrow(children)) {
+    cur <- children[i, "node_id"]
+
+    # Add children
+    acc <- c(acc, sr_get_disease_child_nodes(cur))
+  }
+
+  return(acc)
 }

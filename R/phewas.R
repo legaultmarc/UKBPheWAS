@@ -4,6 +4,9 @@ library(foreach)
 
 
 bin_data_generators <- list(
+  self_reported_diseases = list(
+    gen = generator_self_reported_diseases
+  ),
   cv_endpoints = list(
     gen = generator_cv_endpoints
   ),
@@ -74,10 +77,12 @@ runPheWAS <- function(configuration, build_cache = FALSE, raw_cache = NULL) {
         limit = configuration$limit
       )
 
+      cat("Got results, clean and save\n")
+
       results <- clean_and_save(gen_name, results, configuration)
 
       remove(results)
-      gc()
+      gc(full = TRUE)
 
       cat("DONE!\n")
 
