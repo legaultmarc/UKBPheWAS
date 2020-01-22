@@ -1,4 +1,6 @@
 #' Check if an array of ICD10 codes fall within a range.
+#'
+#' @export
 codes_in_range <- function(codes, left, right) {
 
     # Strip dots.
@@ -6,23 +8,32 @@ codes_in_range <- function(codes, left, right) {
         gsub("\\.", "", x)
     }
 
+    left <- strip_dots(left)
+    right <- strip_dots(right)
+
+    stopifnot(length(left) == length(right))
+    block_bound_length <- nchar(left)
+
     # Set dots.
-    parse_icd10 <- function(x) {
+    parse_icd10 <- function(x, toLength = NULL) {
+        x <- strip_dots(x)
+
+        if (!is.null(toLength)) {
+          x <- substr(x, 1, toLength)
+        }
+
         chapter <- substr(x, 1, 1)
         num <- substring(x, 2)
 
         tens <- substr(num, 1, 2)
         decimal <- substring(num, 3)
 
-        list(
-            chapter = chapter,
-            num = as.numeric(
-                paste0(tens, ".", decimal)
-            )
-        )
+        num = as.numeric(paste0(tens, ".", decimal))
+
+        list(chapter = chapter, num = num)
     }
 
-    codes <- parse_icd10(codes)
+    codes <- parse_icd10(codes, block_bound_length)
     left <- parse_icd10(left)
     right <- parse_icd10(right)
 
