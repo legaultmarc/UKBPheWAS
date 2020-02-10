@@ -1,3 +1,6 @@
 inst/doc
 .R*
 *.swp
+bin/dealer
+*.egg-info
+*.pyc
