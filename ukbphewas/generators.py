@@ -141,6 +141,9 @@ def phecode_in_exclusion_range(code: str,
 def data_generator_phecodes(configuration):
     data = configuration.get_cache()["diseases"]
 
+    # Strip dots from ICD10 codes.
+    data.diag_icd10 = data.diag_icd10.str.replace(".", "", regex=False)
+
     # Apply subset.
     if configuration.subset:
         data = data.loc[data.eid.isin(configuration.subset), :]

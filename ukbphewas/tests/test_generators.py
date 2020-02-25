@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 from ..generators import *
 from ..configuration import Configuration
@@ -11,6 +12,36 @@ DummyConfiguration = lambda: Configuration(
     limit = None,
     raw_data_cache = ""
 )
+
+
+def test_phecodes_data_generator():
+    conf = DummyConfiguration()
+
+    # We'll simulate:
+    # - Some cases of 411.2
+    # + I23.4 is not in that definition, but it's in the exclusion range.
+    # - A an exclusion from controls
+
+    conf._cache = {"diseases": pd.DataFrame({
+        "eid": ["s1", "s2", "s3", "s4", "s5"],
+        "diag_icd10": ["I21", "I23.8", "I513", "A031", "I23.4"]
+    })}
+
+    expected_status = {
+        411.2: [1, 1, 1, 0, np.nan],
+        8.5: [0, 0, 0, 1, 0],
+        414: [np.nan, np.nan, np.nan, 1]
+    }
+
+    for meta, data in data_generator_phecodes(conf):
+        expected = expected_status[meta["variable_id"]]
+
+        # Data generators never yield controls so we can drop them.
+        expected = np.array([i for i in expected if i != 0])
+
+        data = data.sort_values("eid")
+
+        np.testing.assert_array_equal(data.y.values, expected)
 
 
 def test_continuous_data_generator():
