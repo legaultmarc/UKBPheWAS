@@ -1,2 +1,2 @@
 bin/dealer: src/dealer.c
-	gcc -lzmq src/dealer.c -o bin/dealer
+	gcc src/dealer.c -lzmq -o bin/dealer
