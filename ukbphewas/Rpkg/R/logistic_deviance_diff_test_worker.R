@@ -10,7 +10,8 @@ monitor_addr <- args[3]
 
 fit_fastglm <- function(data_matrix) {
   fastglm(
-    x = data_matrix[, -1],
+    # We add the intercept to the x matrix.
+    x = cbind(1, data_matrix[, -1]),
     y = data_matrix[, 1],
     family = binomial(),
     method = 2
