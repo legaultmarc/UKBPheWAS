@@ -264,7 +264,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def create_sex_subset(configuration, sex_column, keep_male):
+def detect_sample_sex(configuration, sex_column):
     # Look for sex_column in the covariables.
     sex = None
 
@@ -317,14 +317,14 @@ def create_sex_subset(configuration, sex_column, keep_male):
         sex.loc[sex[sex_column] == 2, "male"] = 0
 
     # We don't keep individuals with unknown sex.
-    sex = sex.dropna(subset=["male"])
+    return sex.set_index("sample_id", verify_integrity=True)["male"]
 
     # Now we return the samples to keep.
-    if keep_male:
-        return sex.loc[sex.male == 1, "sample_id"].unique().tolist()
+    # if keep_male:
+    #     return sex.loc[sex.male == 1, "sample_id"].unique().tolist()
 
-    else:
-        return sex.loc[sex.male == 0, "sample_id"].unique().tolist()
+    # else:
+    #     return sex.loc[sex.male == 0, "sample_id"].unique().tolist()
 
 
 def main():
@@ -333,16 +333,23 @@ def main():
     # Parse the configuration.
     configuration = Configuration.from_file(args.configuration)
 
-    if args.male_only or args.female_only:
-        if args.sex_column is None:
-            raise RuntimeError("Requested sex filtering, but not --sex-column "
-                               "provided.")
-
-        configuration.subset = create_sex_subset(
-            configuration,
-            args.sex_column,
-            keep_male=args.male_only
+    if args.sex_column:
+        # We will infer the sex of samples. Useful for subsetting or for
+        # sex-based exclusions.
+        configuration.set_sample_sex(
+            detect_sample_sex(configuration, args.sex_column)
         )
+
+    if args.male_only or args.female_only:
+        if not configuration.sample_sex_known():
+            raise RuntimeError("Requested sex filtering, but not --sex-column "
+                               "provided. Or sex incorrectly detected.")
+
+        if args.male_only:
+            configuration.subset = configuration.get_males().tolist()
+
+        elif args.female_only:
+            configuration.subset = configuration.get_females().tolist()
 
         n = len(configuration.subset)
         sex = "male" if args.male_only else "female"

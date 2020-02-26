@@ -2,6 +2,9 @@
 # For now, only linear LRT is implemented.
 import os
 import json
+from typing import Dict, Any, TypeVar, Type
+
+import pandas as pd
 
 from . import Rpkg
 from .db import load_or_create_data_cache
@@ -63,6 +66,9 @@ class DoFTest(_LinearConfiguration):
         self.augmented_variables = augmented_variables
 
 
+T = TypeVar("T")
+
+
 class Configuration(object):
     def __init__(
         self,
@@ -97,6 +103,7 @@ class Configuration(object):
             continuous_variables_path
         )
         self.subset = subset
+        self._sample_sex = None
 
         self.linear_conf = linear_conf
         self.binary_conf = binary_conf
@@ -107,10 +114,28 @@ class Configuration(object):
     def should_do_binary(self):
         return not isinstance(self.binary_conf, SkipBinary)
 
+    def sample_sex_known(self) -> bool:
+        return self._sample_sex is not None
+
+    def set_sample_sex(self, sex_series: pd.Series) -> None:
+        """Set the sex of samples.
+
+        This function takes as series where the index is the sample_id and
+        the value is the sex (0 = female, 1 = male, NA = unknown).
+
+        """
+        self._sample_sex = sex_series
+
+    def get_males(self) -> pd.Index:
+        return self._sample_sex[self._sample_sex == 1].index
+
+    def get_females(self) -> pd.Index:
+        return self._sample_sex[self._sample_sex == 0].index
+
     @classmethod
-    def from_file(cls, filename):
+    def from_file(cls: Type[T], filename: str) -> T:
         """Initialize a Configuration from a file."""
-        global_vars = {}
+        global_vars: Dict[str, Any] = {}
         with open(filename) as f:
             conf_script = f.read()
 
@@ -132,12 +157,11 @@ class Configuration(object):
 
         return configuration
 
-    def to_json(self):
+    def to_json(self) -> str:
         try:
-            d = self.__dict__.copy()
-
-            if d.get("_cache") is not None:
-                del d["_cache"]
+            d: Dict[str, Any] = {
+                k: v for k, v in self.__dict__.items() if not k.startswith("_")
+            }
 
             d["linear_conf"] = self.linear_conf.__dict__
             d["linear_conf"]["type"] = self.linear_conf.__class__.__name__
