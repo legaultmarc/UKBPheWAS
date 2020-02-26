@@ -319,13 +319,6 @@ def detect_sample_sex(configuration, sex_column):
     # We don't keep individuals with unknown sex.
     return sex.set_index("sample_id", verify_integrity=True)["male"]
 
-    # Now we return the samples to keep.
-    # if keep_male:
-    #     return sex.loc[sex.male == 1, "sample_id"].unique().tolist()
-
-    # else:
-    #     return sex.loc[sex.male == 0, "sample_id"].unique().tolist()
-
 
 def main():
     args = parse_args()

@@ -40,6 +40,15 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
   # Read the covariables.
   covars <- get_xs(conf)
 
+  # If there is a defined subset, we subset right away to accelerate analyses.
+  if (!is.null(conf$subset)) {
+    conf$subset <- as.character(conf$subset)
+    cat(paste0(
+      "R: Subsetting ", length(conf$subset), " individuals."
+    ))
+    covars <- covars[covars$sample_id %in% conf$subset, ]
+  }
+
   # Create a header file.
   cat(paste0("variable_id,analysis_type,n_cases,n_controls,",
              "n_excluded_from_controls,deviance_base,",

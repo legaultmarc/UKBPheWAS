@@ -81,33 +81,54 @@ def data_generator_continuous_variables(configuration, _normalize=True):
 
 @analysis_type("ICD10_3CHAR")
 def data_generator_icd10_3chars(configuration):
-    data = configuration.get_cache()["diseases"]
+    cache = configuration.get_cache()
+    data = cache["diseases"]
 
     # Apply subset.
     if configuration.subset:
         data = data.loc[data.eid.isin(configuration.subset), :].copy()
 
     data.diag_icd10 = data.diag_icd10.str[:3]
-    codes = data.diag_icd10.drop_duplicates()
+
     data["y"] = 1
 
-    for i, code in enumerate(codes):
+    codes = data[["diag_icd10"]].drop_duplicates()
+
+    # Add a column for cancer codes.
+    codes["chapter"] = codes.diag_icd10.str.get(0)
+    codes["num"] = codes.diag_icd10.str.slice(1, 3).astype(int)
+    codes["is_cancer"] = ((codes["chapter"] == "C") |
+                          ((codes["chapter"] == "D") & (codes["num"] <= 48)))\
+                         .astype(int)
+
+    # We use the cached exclusions because they should include cancers from
+    # ICD9 codes.
+    cancer_excl_from_controls = pd.Index(cache["cancer_excl_from_controls"])
+
+    for i, row in codes.iterrows():
         if configuration.limit and i >= configuration.limit:
             break
 
         metadata = {
-            "variable_id": code,
+            "variable_id": row.diag_icd10,
             "analysis_type": "ICD10_3CHAR",
         }
 
-        cur = data.loc[data.diag_icd10 == code, ["eid", "y"]]
+        cur = data.loc[data.diag_icd10 == row.diag_icd10, ["eid", "y"]]
 
         if cur.shape[0] < configuration.binary_conf.min_num_cases:
             continue
 
-        # TODO for cancer exclude from controls.
+        if row.is_cancer:
+            # Exclude other cancer cases from controls.
+            to_exclude = pd.DataFrame({
+                "eid": cancer_excl_from_controls.difference(cur.eid)
+            })
+            to_exclude["y"] = np.nan
 
-        yield (metadata, data.loc[data.diag_icd10 == code, ["eid", "y"]])
+            cur = pd.concat((cur, to_exclude))
+
+        yield (metadata, cur)
 
 
 @analysis_type("ICD10_BLOCK")
@@ -215,6 +236,14 @@ def data_generator_phecodes(configuration):
     data = pd.merge(data, icd10_to_phecode,
                     left_on="diag_icd10", right_on="icd10")
 
+    # Read the gender exclusions.
+    gender_exclusions = pd.read_csv(
+        os.path.join(DATA_ROOT, "gender_restriction.csv.gz")
+    )
+    gender_exclusions = gender_exclusions.set_index(
+        "phecode", verify_integrity=True
+    )
+
     data["y"] = 1
 
     # We build a map of Phecode to exclusion range.
@@ -225,6 +254,13 @@ def data_generator_phecodes(configuration):
             row.exclude_phecode
         )
 
+    # Preload the males and females if available to acclerate sex-based
+    # exclusions.
+    males = None
+    females = None
+    if configuration.sample_sex_known():
+        males = configuration.get_males()
+        females = configuration.get_females()
 
     codes = data.phecode.dropna().drop_duplicates()
     for i, code in enumerate(codes):
@@ -237,6 +273,31 @@ def data_generator_phecodes(configuration):
         }
 
         cur = data.loc[data.phecode == code, ["eid", "y"]]
+
+        # Check gender exclusion
+        if configuration.sample_sex_known():
+            sex_excl = gender_exclusions.loc[code, :]
+
+            if sex_excl.male_only:
+                cur = pd.concat((
+                    cur,
+                    pd.DataFrame({"eid": females, "y": np.nan})
+                ))
+                metadata["sex_subset"] = "MALE_ONLY"
+
+            elif sex_excl.female_only:
+                cur = pd.concat((
+                    cur,
+                    pd.DataFrame({"eid": males, "y": np.nan})
+                ))
+                metadata["sex_subset"] = "FEMALE_ONLY"
+
+            else:
+                metadata["sex_subset"] = "BOTH"
+
+        else:
+            metadata["sex_subset"] = "SEX_UNKNOWN"
+
 
         # Define samples to exclude.
         exclusion_range = phecode_to_excl_ranges.get(code)

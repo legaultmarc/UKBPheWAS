@@ -19,9 +19,44 @@ class DummyLogistic(object):
         self.min_num_cases = 1
 
 
+def test_icd10_3chars_cancer_exclusion():
+    conf = DummyConfiguration()
+    conf.binary_conf = DummyLogistic()
+    conf._cache = {}
+
+    conf._cache["diseases"] = pd.DataFrame({
+        "eid": ["s1", "s2", "s3"],
+        "diag_icd10": ["C502", "C64", "I21"]
+    })
+
+    conf._cache["cancer_excl_from_controls"] = np.array(["s1", "s2"])
+
+    expected = {
+        "C50": pd.DataFrame({
+            "eid": ["s1", "s2"],
+            "y": [1, np.nan]
+        }),
+        "C64": pd.DataFrame({
+            "eid": ["s1", "s2"],
+            "y": [np.nan, 1]
+        }),
+        "I21": pd.DataFrame({
+            "eid": ["s3"],
+            "y": [1]
+        }),
+    }
+
+    for meta, data in data_generator_icd10_3chars(conf):
+        assert meta["variable_id"] in expected
+        expct = expected[meta["variable_id"]]
+
+        data = data.sort_values("eid").reset_index(drop=True)
+
+        pd.testing.assert_frame_equal(expct, data)
+
+
 def test_icd10_block_data_generator():
     conf = DummyConfiguration()
-
     conf.binary_conf = DummyLogistic()
 
     conf._cache = {"diseases": pd.DataFrame({
@@ -49,6 +84,61 @@ def test_icd10_block_data_generator():
         expct = expected[meta["variable_id"]]
 
         pd.testing.assert_frame_equal(expct, data)
+
+
+def test_phecodes_sex_exclusion():
+    conf = DummyConfiguration()
+
+    # 187.1 is male only (C60, C63, ...)
+    # 174.11 is female only (C50, ...)
+
+    sex = pd.Series(
+        [1, 1, np.nan, 0, 0, 1],
+        index=[f"s{i+1}" for i in range(6)]
+    )
+    conf.set_sample_sex(sex)
+
+    conf._cache = {}
+    conf._cache["diseases"] = pd.DataFrame({
+        "eid": ["s1", "s2", "s3", "s4", "s5", "s6"],
+        "diag_icd10": ["C60", "C63", "I21", "C50", "I25", "I200"],
+    })
+
+    expected = {
+        187.1: pd.DataFrame({
+            "eid": ["s1", "s2", "s4", "s5"],
+            "y": [1, 1, np.nan, np.nan]
+        }),
+        # 411.2 excludes Phecodes 410-414.99 (so s5 and s6)
+        411.2: pd.DataFrame({
+            "eid": ["s3", "s5", "s6"],
+            "y": [1, np.nan, np.nan]
+        }),
+        174.11: pd.DataFrame({
+            "eid": ["s1", "s2", "s4", "s6"],
+            "y": [np.nan, np.nan, 1, np.nan]
+        }),
+        # 411.8 excludes Phecodes 410-414.99 (so s3 and s6)
+        411.8: pd.DataFrame({
+            "eid": ["s3", "s5", "s6"],
+            "y": [np.nan, 1, np.nan]
+        }),
+        # 411.1 excludes Phecodes 410-414.99 (so s3 and s5)
+        411.1: pd.DataFrame({
+            "eid": ["s3", "s5", "s6"],
+            "y": [np.nan, np.nan, 1]
+        })
+    }
+
+    for i, (meta, data) in enumerate(data_generator_phecodes(conf)):
+        assert meta["variable_id"] in expected
+
+        expct = expected[meta["variable_id"]]
+        data = data.sort_values("eid").reset_index(drop=True)
+
+        pd.testing.assert_frame_equal(expct, data)
+
+    assert i == len(expected) - 1
 
 
 def test_phecodes_data_generator():
