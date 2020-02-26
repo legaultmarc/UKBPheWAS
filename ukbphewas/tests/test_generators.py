@@ -14,6 +14,43 @@ DummyConfiguration = lambda: Configuration(
 )
 
 
+class DummyLogistic(object):
+    def __init__(self):
+        self.min_num_cases = 1
+
+
+def test_icd10_block_data_generator():
+    conf = DummyConfiguration()
+
+    conf.binary_conf = DummyLogistic()
+
+    conf._cache = {"diseases": pd.DataFrame({
+        "eid": ["s1", "s2", "s3", "s4", "s5"],
+        "diag_icd10": ["I20", "I25.9", "I513", "A031", "I23.4"]
+    })}
+
+    expected = {
+        "A00-A09": pd.DataFrame({
+            "eid": ["s4"],
+            "y": [1]
+        }),
+        "I20-I25": pd.DataFrame({
+            "eid": ["s1", "s2", "s5"],
+            "y": [1, 1, 1]
+        }),
+        "I30-I52": pd.DataFrame({
+            "eid": ["s3"],
+            "y": [1]
+        }),
+    }
+
+    for meta, data in data_generator_icd10_block(conf):
+        assert meta["variable_id"] in expected
+        expct = expected[meta["variable_id"]]
+
+        pd.testing.assert_frame_equal(expct, data)
+
+
 def test_phecodes_data_generator():
     conf = DummyConfiguration()
 

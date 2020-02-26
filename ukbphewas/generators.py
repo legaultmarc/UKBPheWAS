@@ -110,6 +110,71 @@ def data_generator_icd10_3chars(configuration):
         yield (metadata, data.loc[data.diag_icd10 == code, ["eid", "y"]])
 
 
+@functools.lru_cache(maxsize=1024)
+def icd10_in_block(code: str, left: str, right: str) -> bool:
+    # Check that the block spans a single chapter.
+    assert left[0] == right[0]
+
+    # We assume that the bounds are for 3 character ICD10 blocks (e.g. I20-I25)
+    assert len(left) == len(right) == 3
+
+    # Match on chapters
+    if code[0] != left[0]:
+        return False
+
+    # Strip chapters.
+    code, left, right = [i[1:] for i in (code, left, right)]
+
+    # Code could come from anywhere so we strip dots, but we assume that
+    # left and right are from the ICD10 blocks reference file and have no
+    # dot.
+    code = code.replace(".", "")
+
+    code_num, left_num, right_num = [
+        float(i[:2]) for i in (code, left, right)
+    ]
+
+    return left_num <= code_num <= right_num
+
+
+@analysis_type("ICD10_BLOCK")
+def data_generator_icd10_block(configuration):
+    data = configuration.get_cache()["diseases"]
+
+    # Read the ICD10 block metadata.
+    icd10_blocks = pd.read_csv(os.path.join(DATA_ROOT, "icd10_blocks.csv.gz"))
+
+    lr = icd10_blocks.block.str.split("-", expand=True)
+    lr.columns = ["left", "right"]
+
+    icd10_blocks = pd.concat((icd10_blocks, lr), axis=1)
+
+    # Apply subset.
+    if configuration.subset:
+        data = data.loc[data.eid.isin(configuration.subset), :].copy()
+
+    data["y"] = 1
+
+    for i, row in icd10_blocks.iterrows():
+        # Find all individuals with a code in the block.
+        cur = data.loc[
+            data.apply(
+                lambda r: icd10_in_block(r.diag_icd10, row.left, row.right),
+                axis=1
+            ), :
+        ]
+
+        if cur.shape[0] < configuration.binary_conf.min_num_cases:
+            continue
+
+        metadata = {
+            "variable_id": row.block,
+            "analysis_type": "ICD10_BLOCK",
+        }
+
+        yield metadata, cur[["eid", "y"]].reset_index(drop=True)
+
+
 # Left and right phecodes of the range defining the exclusion.
 ExclusionRange = Tuple[float, float]
 
@@ -139,6 +204,7 @@ def phecode_in_exclusion_range(code: str,
 
 @analysis_type("PHECODES")
 def data_generator_phecodes(configuration):
+    # TODO Apply gender restriction if available.
     data = configuration.get_cache()["diseases"]
 
     # Strip dots from ICD10 codes.
