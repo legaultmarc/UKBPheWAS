@@ -57,6 +57,19 @@ get_xs <- function(configuration) {
 }
 
 
+remove_sex_from_rhs <- function(rhs, sex_column) {
+  rhs_li <- char_to_terms(rhs)
+
+  rhs_li <- rhs_li[rhs_li != sex_column]
+  paste(rhs_li, collapse = " + ")
+}
+
+
+char_to_terms <- function(rhs) {
+  labels(terms(as.formula(paste0("~", rhs))))
+}
+
+
 Worker <- function(worker_id, dealer_addr, monitor_addr, callback) {
   # Connect to the dealer.
   context <- init.context()

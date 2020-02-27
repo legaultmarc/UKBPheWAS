@@ -103,7 +103,16 @@ class Configuration(object):
             continuous_variables_path
         )
         self.subset = subset
+
+        # Set automatically by CLI if --male-only or --female-only
+        self.sex_stratified = False
+
+        # Set if the sex of samples is known (Series with sample id as index).
+        # 1=male, 0=female, nan=unknown
         self._sample_sex = None
+
+        # Set by CLI if --sex-column is provided
+        self.sex_column = None
 
         self.linear_conf = linear_conf
         self.binary_conf = binary_conf

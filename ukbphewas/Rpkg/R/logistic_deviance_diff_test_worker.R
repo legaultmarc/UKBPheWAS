@@ -44,7 +44,7 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
   if (!is.null(conf$subset)) {
     conf$subset <- as.character(conf$subset)
     cat(paste0(
-      "R: Subsetting ", length(conf$subset), " individuals."
+      "R: Subsetting ", length(conf$subset), " individuals.\n"
     ))
     covars <- covars[covars$sample_id %in% conf$subset, ]
   }
@@ -61,6 +61,25 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
     open = "wt"
   )
 
+  # Check if sex is in the independant variables.
+  # This is important later when the variability in the sex variable is
+  # tested after filtering.
+  base_cols <- char_to_terms(conf$model_rhs)
+  aug_cols = conf$binary_conf$augmented_variables
+
+  sex_in_indep_variables <- (
+    !is.null(conf$sex_column) && (conf$sex_column %in% c(base_cols, aug_cols))
+  )
+
+  # If the analysis is sex stratified, remove the sex from the independant
+  # variables.
+  if (conf$sex_stratified && sex_in_indep_variables) {
+    base_cols  <- base_cols[base_cols != conf$sex_column]
+    aug_cols  <- aug_cols[aug_cols != conf$sex_column]
+
+    sex_in_indep_variables <- FALSE
+  }
+
   # Callback for when data is to be processed from the queue.
   do.work <- function(metadata, data) {
     # Single column eid.
@@ -75,17 +94,7 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
 
     n_excluded <- sum(is.na(covars[, "y"]))
 
-    # Find the columns for the base model.
-    base_formula <- as.formula(paste0(
-      "y ~ ", conf$model_rhs
-    ))
-    base_cols <- labels(terms(base_formula))
-
-    xpcs = conf$binary_conf$augmented_variables
-
-    aug_model_rhs <- paste0(
-      conf$model_rhs, " + ", paste(xpcs, collapse = " + ")
-    )
+    aug_model_rhs <- paste(c(base_cols, aug_cols), collapse = " + ")
 
     aug_formula <- as.formula(paste0(
       "y ~ ", aug_model_rhs
@@ -99,6 +108,25 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
     }
 
     aug_data_matrix <- as.matrix(aug_data_matrix[keep, ])
+
+    # if the sex column is defined and included as an independant variable.
+    # We check that there is variability remaining after subsetting.
+    if (sex_in_indep_variables) {
+      n_unique_sex <- length(unique(aug_data_matrix[, conf$sex_column]))
+
+      if (n_unique_sex <= 1) {
+        # There is no variability in the sex (only men or women are being
+        # analyzed.
+        # So we remove this column from the matrix and from base_cols.
+        aug_data_matrix <- aug_data_matrix[,
+          (colnames(aug_data_matrix) != conf$sex_column)
+        ]
+
+        base_cols <- base_cols[base_cols != conf$sex_column]
+
+        cat("R: Removing sex column because there is no variability.\n")
+      }
+    }
 
     n_cases <- sum(aug_data_matrix[, "y"] == 1)
     n_controls <- sum(aug_data_matrix[, "y"] == 0)

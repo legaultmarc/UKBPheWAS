@@ -59,11 +59,12 @@ def data_generator_continuous_variables(configuration, _normalize=True):
             raw_data.sample_id.isin(configuration.subset), :
         ]
 
-    for i, col in enumerate(raw_data.columns):
+    n_generated = 0
+    for col in raw_data.columns:
         if col == "sample_id":
             continue
 
-        if configuration.limit and i >= configuration.limit:
+        if configuration.limit and n_generated >= configuration.limit:
             break
 
         metadata = {
@@ -77,6 +78,8 @@ def data_generator_continuous_variables(configuration, _normalize=True):
             y[col] = (y[col] - y[col].mean()) / y[col].std()
 
         yield (metadata, y)
+
+        n_generated += 1
 
 
 @analysis_type("ICD10_3CHAR")
@@ -103,10 +106,13 @@ def data_generator_icd10_3chars(configuration):
 
     # We use the cached exclusions because they should include cancers from
     # ICD9 codes.
-    cancer_excl_from_controls = pd.Index(cache["cancer_excl_from_controls"])
+    cancer_excl_from_controls = pd.Index(
+        cache["cancer_excl_from_controls"]["sample_id"]
+    )
 
-    for i, row in codes.iterrows():
-        if configuration.limit and i >= configuration.limit:
+    n_generated = 0
+    for _, row in codes.iterrows():
+        if configuration.limit and n_generated >= configuration.limit:
             break
 
         metadata = {
@@ -129,6 +135,7 @@ def data_generator_icd10_3chars(configuration):
             cur = pd.concat((cur, to_exclude))
 
         yield (metadata, cur)
+        n_generated += 1
 
 
 @analysis_type("ICD10_BLOCK")
@@ -158,8 +165,9 @@ def data_generator_icd10_block(configuration):
     data["chapter"] = data.diag_icd10.str.get(0)
     data["num"] = data.diag_icd10.str.slice(1, 3).astype(int)
 
-    for i, row in icd10_blocks.iterrows():
-        if configuration.limit and i >= configuration.limit:
+    n_generated = 0
+    for _, row in icd10_blocks.iterrows():
+        if configuration.limit and n_generated >= configuration.limit:
             break
 
         # Find all individuals with a code in the block.
@@ -178,6 +186,8 @@ def data_generator_icd10_block(configuration):
         }
 
         yield metadata, cur[["eid", "y"]].reset_index(drop=True)
+
+        n_generated += 1
 
 
 # Left and right phecodes of the range defining the exclusion.
@@ -209,7 +219,6 @@ def phecode_in_exclusion_range(code: str,
 
 @analysis_type("PHECODES")
 def data_generator_phecodes(configuration):
-    # TODO Apply gender restriction if available.
     data = configuration.get_cache()["diseases"]
 
     # Strip dots from ICD10 codes.
@@ -256,15 +265,28 @@ def data_generator_phecodes(configuration):
 
     # Preload the males and females if available to acclerate sex-based
     # exclusions.
-    males = None
-    females = None
+    males = males_frame = analysis_male_only = None
+    females = females_frame = analysis_female_only = None
     if configuration.sample_sex_known():
         males = configuration.get_males()
+        males_frame = pd.DataFrame({"eid": males, "y": np.nan})
+
         females = configuration.get_females()
+        females_frame = pd.DataFrame({"eid": females, "y": np.nan})
+
+        # Check if analysis is already male or female only.
+        # If this is the case, we'll skip the exclusions.
+        if configuration.subset is None:
+            analysis_male_only = analysis_female_only = False
+
+        else:
+            analysis_male_only = males.isin(configuration.subset).all()
+            analysis_female_only = females.isin(configuration.subset).all()
 
     codes = data.phecode.dropna().drop_duplicates()
-    for i, code in enumerate(codes):
-        if configuration.limit and i >= configuration.limit:
+    n_generated = 0
+    for code in codes:
+        if configuration.limit and n_generated >= configuration.limit:
             break
 
         metadata = {
@@ -279,17 +301,17 @@ def data_generator_phecodes(configuration):
             sex_excl = gender_exclusions.loc[code, :]
 
             if sex_excl.male_only:
-                cur = pd.concat((
-                    cur,
-                    pd.DataFrame({"eid": females, "y": np.nan})
-                ))
+                if analysis_female_only:
+                    continue
+
+                cur = pd.concat((cur, females_frame))
                 metadata["sex_subset"] = "MALE_ONLY"
 
             elif sex_excl.female_only:
-                cur = pd.concat((
-                    cur,
-                    pd.DataFrame({"eid": males, "y": np.nan})
-                ))
+                if analysis_male_only:
+                    continue
+
+                cur = pd.concat((cur, males_frame))
                 metadata["sex_subset"] = "FEMALE_ONLY"
 
             else:
@@ -332,3 +354,5 @@ def data_generator_phecodes(configuration):
             cur = pd.concat((cur, samples_to_exclude), axis=0)
 
         yield (metadata, cur)
+
+        n_generated += 1

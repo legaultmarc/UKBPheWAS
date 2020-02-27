@@ -333,7 +333,11 @@ def main():
             detect_sample_sex(configuration, args.sex_column)
         )
 
+        configuration.sex_column = args.sex_column
+
     if args.male_only or args.female_only:
+        configuration.sex_stratified = True
+
         if not configuration.sample_sex_known():
             raise RuntimeError("Requested sex filtering, but not --sex-column "
                                "provided. Or sex incorrectly detected.")
