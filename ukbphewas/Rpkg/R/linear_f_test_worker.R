@@ -41,6 +41,26 @@ linear_f_test_worker <- function(worker_id, ...) {
     open = "wt"
   )
 
+  # Check if sex is in the independant variables and if the analysis is
+  # stratified by sex.
+  base_cols <- char_to_terms(conf$model_rhs)
+  aug_cols <- conf$linear_conf$augmented_variables
+
+  sex_in_indep_variables <- (
+    !is.null(conf$sex_column) && (conf$sex_column %in% c(base_cols, aug_cols))
+  )
+
+  # If the analysis is sex stratified, remove the sex from the independant
+  # variables.
+  if (conf$sex_stratified && sex_in_indep_variables) {
+    base_cols  <- base_cols[base_cols != conf$sex_column]
+    aug_cols  <- aug_cols[aug_cols != conf$sex_column]
+
+    sex_in_indep_variables <- FALSE
+  }
+
+  base_aug_cols <- c(base_cols, aug_cols)
+
   # Callback for when data is to be processed from the queue.
   do.work <- function(metadata, data) {
     data <- as.data.frame(read_table(data))
@@ -58,24 +78,35 @@ linear_f_test_worker <- function(worker_id, ...) {
     covars_idx <- match(overlapping_samples, covars$sample_id)
     data_idx <- match(overlapping_samples, data$sample_id)
 
-    # Find the columns in covars for the PCs.
-    cols <- names(covars)
-    base_formula <- as.formula(paste0(
-      "y ~ ", conf$model_rhs
-    ))
-    base_cols <- labels(terms(base_formula))
-
-    xpcs = conf$linear_conf$augmented_variables
-    aug_cols <- c(base_cols, xpcs)
-
     # Fit both models.
     outcome <- names(data)[names(data) != "sample_id"]
 
-    m <- cbind(data[data_idx, outcome], covars[covars_idx, aug_cols])
+    m <- cbind(data[data_idx, outcome], covars[covars_idx, base_aug_cols])
     m <- as.matrix(m[complete.cases(m), ])
 
+    # if the sex column is defined and included as an independant variable.
+    # We check that there is variability remaining after subsetting.
+    if (sex_in_indep_variables) {
+      n_unique_sex <- length(unique(m[, conf$sex_column]))
+      print(n_unique_sex)
+
+      if (n_unique_sex <= 1) {
+        # There is no variability in the sex (only men or women are being
+        # analyzed.
+        # So we remove this column from the matrix and from base_cols.
+        m <- m[,
+          (colnames(aug_data_matrix) != conf$sex_column)
+        ]
+
+        base_cols <- base_cols[base_cols != conf$sex_column]
+        base_aug_cols <- base_aug_cols[base_aug_cols != conf$sex_column]
+
+        cat("R: Removing sex column because there is no variability.\n")
+      }
+    }
+
     fit_base <- lm(m[, 1] ~ m[, base_cols])
-    fit_aug <- lm(m[, 1] ~ m[, aug_cols])
+    fit_aug <- lm(m[, 1] ~ m[, base_aug_cols])
 
     f <- anova(fit_base, fit_aug)
 
