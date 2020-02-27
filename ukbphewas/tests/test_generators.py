@@ -29,7 +29,9 @@ def test_icd10_3chars_cancer_exclusion():
         "diag_icd10": ["C502", "C64", "I21"]
     })
 
-    conf._cache["cancer_excl_from_controls"] = np.array(["s1", "s2"])
+    conf._cache["cancer_excl_from_controls"] = pd.DataFrame({
+        "sample_id": ["s1", "s2"]
+    })
 
     expected = {
         "C50": pd.DataFrame({
