@@ -1,4 +1,3 @@
-library(arrow)
 library(fastglm)
 
 args <- commandArgs(trailingOnly=TRUE)
@@ -83,7 +82,7 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
   # Callback for when data is to be processed from the queue.
   do.work <- function(metadata, data) {
     # Single column eid.
-    data <- as.data.frame(read_table(data))
+    data <- deserialize(data)
     cases <- as.character(data[data[, "y"] == 1, "eid"])
     to_exclude <- as.character(data[is.na(data[, "y"]), "eid"])
 

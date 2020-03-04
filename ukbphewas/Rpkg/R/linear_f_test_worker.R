@@ -15,7 +15,6 @@
 # covars is taken from a serialized file.
 # gene_pcs as well
 # source("workers/worker.R")
-library(arrow)
 
 args <- commandArgs(trailingOnly=TRUE)
 
@@ -63,7 +62,7 @@ linear_f_test_worker <- function(worker_id, ...) {
 
   # Callback for when data is to be processed from the queue.
   do.work <- function(metadata, data) {
-    data <- as.data.frame(read_table(data))
+    data <- deserialize(data)
 
     # We explicitly treat the sample_ids as strings.
     data$sample_id <- as.character(data$sample_id)

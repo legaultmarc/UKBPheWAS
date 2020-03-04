@@ -11,7 +11,6 @@ import uuid
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pyarrow.feather
 import zmq
 
@@ -19,6 +18,7 @@ import zmq
 from .configuration import Configuration
 from . import bin
 from . import Rpkg
+from .serdef import serialize
 from .generators import *
 
 
@@ -44,6 +44,7 @@ def start_worker(worker_id, out_addr, monitor_addr, worker_script):
 
     cmd = [
         "Rscript", "--vanilla",
+        "-e", "source('{}')".format(os.path.join(worker_base, "serdef.R")),
         "-e", "source('{}')".format(os.path.join(worker_base, "worker.R")),
         "-e", "source('{}')".format(worker_script),
         str(worker_id), out_addr, monitor_addr
@@ -55,15 +56,8 @@ def start_worker(worker_id, out_addr, monitor_addr, worker_script):
 
 
 def send_data(socket, metadata, data):
-    table = pa.Table.from_pandas(data, preserve_index=False)
-    sink = pa.BufferOutputStream()
-    stream = pa.RecordBatchStreamWriter(sink, table.schema)
-    stream.write_table(table)
-    buf = sink.getvalue()
-
     socket.send_multipart([
-        json.dumps(metadata).encode("utf-8"),
-        buf.to_pybytes()
+        json.dumps(metadata).encode("utf-8"), serialize(data)
     ])
 
 
