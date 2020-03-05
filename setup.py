@@ -11,7 +11,6 @@ class SetupPackage(object):
         p = subprocess.Popen([
             "Rscript",
             "-e", "library(rzmq)",
-            "-e", "library(arrow)",
             "-e", "library(rjson)",
         ])
 
@@ -20,7 +19,7 @@ class SetupPackage(object):
         if ret != 0:
             raise Exception(
                 "R or required packages are not installed. Make sure that "
-                "Rscript is in the path and that rjson, rzmq and arrow are "
+                "Rscript is in the path and that rjson and rzmq are "
                 "installed."
             )
 
