@@ -19,6 +19,98 @@ class DummyLogistic(object):
         self.min_num_cases = 1
 
 
+def test_self_reported_generator():
+    conf = DummyConfiguration()
+    conf.min_num_cases = 1
+    conf.binary_conf = DummyLogistic()
+    conf._cache = {
+        "self_reported_diseases": pd.DataFrame({
+            "sample_id": ["s1", "s2", "s3", "s4"],
+            "disease_code": [
+                "1075",  # s1 had heart attack
+                "1066",  # s2 had heart/cardiac problem (parent of 1075)
+                "1165",  # s3 had pancreatitis
+                "1246",  # s4 had encephalitis
+            ],
+            "disease": ["heart attack", "heart/cardiac problem",
+                        "pancreatitis", "encephalitis"]
+        })
+    }
+
+    expected = {
+        # Node 1092 is heart attack/myocardial infarction
+        # Note that s2 is excluded because it is a "case" for a parent disease.
+        1092: pd.DataFrame({
+            "eid": ["s1", "s2"],
+            "y": [1, np.nan]
+        }),
+        # Node 1082 is heart/cardiac problem
+        1082: pd.DataFrame({
+            "eid": ["s1", "s2"],
+            "y": [1, 1]
+        }),
+        # Node 1071 is cardiovascular
+        1071: pd.DataFrame({
+            "eid": ["s1", "s2"],
+            "y": [1, 1]
+        }),
+        # Node 1186 is pancreatitis
+        1186: pd.DataFrame({
+            "eid": ["s3"],
+            "y": [1]
+        }),
+        # Node 1185 is pancreatic disease
+        1185: pd.DataFrame({
+            "eid": ["s3"],
+            "y": [1]
+        }),
+        # Node 1156 is liver/biliary/pancreas problem
+        1156: pd.DataFrame({
+            "eid": ["s3"],
+            "y": [1]
+        }),
+        # Node 1073 is gastrointestinal/abdominal
+        1073: pd.DataFrame({
+            "eid": ["s3"],
+            "y": [1]
+        }),
+        # Node 1272 is encephalitis
+        1272: pd.DataFrame({
+            "eid": ["s4"],
+            "y": [1]
+        }),
+        # Node 1270 is infection of nervous system
+        1270: pd.DataFrame({
+            "eid": ["s4"],
+            "y": [1]
+        }),
+        # Node 1265 is neurology
+        1265: pd.DataFrame({
+            "eid": ["s4"],
+            "y": [1]
+        }),
+        # Node 1076 is neurology/eye/psychiatry
+        1076: pd.DataFrame({
+            "eid": ["s4"],
+            "y": [1]
+        }),
+    }
+
+    for meta, data in data_generator_self_reported(conf):
+        if meta["variable_id"] in expected:
+            expct = expected[meta["variable_id"]]
+            expct.y = expct.y.astype(float)
+            pd.testing.assert_frame_equal(expected[meta["variable_id"]], data)
+            print("del", meta["variable_id"])
+            del expected[meta["variable_id"]]
+
+        else:
+            assert False, f"Unexpected result for {meta}"
+
+    # Assert all expected results have been seen.
+    assert len(expected) == 0, expected
+
+
 def test_icd10_3chars_cancer_exclusion():
     conf = DummyConfiguration()
     conf.binary_conf = DummyLogistic()

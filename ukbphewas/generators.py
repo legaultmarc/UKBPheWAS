@@ -2,7 +2,6 @@ import functools
 import os
 from typing import Tuple, Sequence
 
-import pyarrow.feather
 import pandas as pd
 import numpy as np
 
@@ -36,7 +35,9 @@ class analysis_type(object):
 
 
 @analysis_type("CONTINUOUS_VARIABLE")
-def data_generator_continuous_variables(configuration, _normalize=True):
+def data_generator_continuous_variables(configuration, _normalize=True,
+                                        only_do=None):
+
     raw_data = configuration.get_cache()["continuous"]
 
     # Pivot into wide format.
@@ -60,7 +61,10 @@ def data_generator_continuous_variables(configuration, _normalize=True):
         ]
 
     n_generated = 0
-    for col in raw_data.columns:
+
+    columns = raw_data.columns if only_do is None else only_do
+
+    for col in columns:
         if col == "sample_id":
             continue
 
@@ -82,8 +86,112 @@ def data_generator_continuous_variables(configuration, _normalize=True):
         n_generated += 1
 
 
+@analysis_type("SELF_REPORTED")
+def data_generator_self_reported(configuration, only_do=None):
+    cache = configuration.get_cache()
+
+    # TODO apply configuration subset!
+
+    # sample_id, disease_code, disease
+    # which represent sample_id, coding, description
+    data = cache["self_reported_diseases"]
+    data["y"] = 1.0
+
+    # Contains coding, meaning, selectable, node, parent
+    sr_coding = pd.read_csv(
+        os.path.join(DATA_ROOT, "coding6_self_reported.tsv.gz"), sep="\t",
+        dtype={
+            "coding": str,
+        }
+    )
+
+    if only_do is not None:
+        sr_coding = sr_coding.loc[sr_coding.node.isin(only_do), :]
+
+    tree = Node.from_adjacency_list([
+        # We use Node's _data attribute to store coding.
+        (
+            row.node_id,
+            row.parent_id if row.parent_id != 0 else None,
+            row.meaning,
+            row.coding
+        )
+        for _, row in sr_coding.iterrows()
+    ])
+
+    for _, coding in sr_coding.iterrows():
+        if coding.coding == "99999":
+            # Skip unclassifiable.
+            continue
+
+        # Find all children and code as cases.
+        n = [node for _, node in tree.iter_depth_first()
+             if node.code == coding.node_id][0]
+
+        children_codings = [node._data for i, node in n.iter_depth_first()]
+
+        all_relevant_codings = children_codings + [coding.coding, ]
+
+        meta = {
+            "variable_id": coding.node_id,
+            "analysis_type": "SELF_REPORTED",
+        }
+
+        cur = data.loc[
+            data.disease_code.isin(all_relevant_codings),
+            ["sample_id", "y"]
+        ].rename(columns={"sample_id": "eid"})
+
+        if (cur.y == 1).sum() < configuration.min_num_cases:
+            continue
+
+        # Exclude individuals with a parent disease from controls.
+        parent_codings = [node._data for node in n.iter_ancestors()]
+        parent_cases = pd.Index(data.loc[
+            data.disease_code.isin(parent_codings),
+            "sample_id"
+        ])
+        to_exclude = parent_cases.difference(cur.eid)
+        exclusion_frame = pd.DataFrame({"eid": to_exclude})
+        exclusion_frame["y"] = np.nan
+
+        cur = pd.concat((cur, exclusion_frame))
+
+        yield (meta, cur.reset_index(drop=True))
+
+
+@analysis_type("CV_ENDPOINTS")
+def data_generator_cv_endpoints(configuration, only_do=None):
+    cache = configuration.get_cache()
+    data = cache["cv_endpoints"]
+
+    # TODO apply configuration subset!
+
+    data.rename(columns={"eid": "sample_id"})
+
+    cols = [i for i in data.columns if i != "sample_id"]
+
+    if only_do is not None:
+        only_do = set(only_do)
+        cols = [i for i in cols if i in only_do]
+
+    n_generated = 0
+    for col in cols:
+        if configuration.limit and n_generated >= configuration.limit:
+            break
+
+        metadata = {
+            "variable_id": col,
+            "analysis_type": "CV_ENDPOINTS"
+        }
+
+        yield (metadata, data[["sample_id", col].rename(columns={col: "y"})])
+
+        n_generated += 1
+
+
 @analysis_type("ICD10_3CHAR")
-def data_generator_icd10_3chars(configuration):
+def data_generator_icd10_3chars(configuration, only_do=None):
     cache = configuration.get_cache()
     data = cache["diseases"]
 
@@ -96,6 +204,9 @@ def data_generator_icd10_3chars(configuration):
     data["y"] = 1
 
     codes = data[["diag_icd10"]].drop_duplicates()
+
+    if only_do is not None:
+        codes = codes.loc[codes.diag_icd10.isin(only_do), :]
 
     # Add a column for cancer codes.
     codes["chapter"] = codes.diag_icd10.str.get(0)
@@ -139,11 +250,14 @@ def data_generator_icd10_3chars(configuration):
 
 
 @analysis_type("ICD10_BLOCK")
-def data_generator_icd10_block(configuration):
+def data_generator_icd10_block(configuration, only_do=None):
     data = configuration.get_cache()["diseases"]
 
     # Read the ICD10 block metadata.
     icd10_blocks = pd.read_csv(os.path.join(DATA_ROOT, "icd10_blocks.csv.gz"))
+
+    if only_do is not None:
+        icd10_blocks = icd10_blocks.loc[icd10_blocks.block.isin(only_do), :]
 
     lr = icd10_blocks.block.str.split("-", expand=True)
     lr.columns = ["left", "right"]
@@ -218,7 +332,7 @@ def phecode_in_exclusion_range(code: str,
 
 
 @analysis_type("PHECODES")
-def data_generator_phecodes(configuration):
+def data_generator_phecodes(configuration, only_do=None):
     data = configuration.get_cache()["diseases"]
 
     # Strip dots from ICD10 codes.
@@ -284,6 +398,11 @@ def data_generator_phecodes(configuration):
             analysis_female_only = females.isin(configuration.subset).all()
 
     codes = data.phecode.dropna().drop_duplicates()
+
+    if only_do is not None:
+        only_do = set(only_do)
+        codes = [code for code in codes if code in only_do]
+
     n_generated = 0
     for code in codes:
         if configuration.limit and n_generated >= configuration.limit:
@@ -356,3 +475,82 @@ def data_generator_phecodes(configuration):
         yield (metadata, cur)
 
         n_generated += 1
+
+
+class Node(object):
+    def __init__(self):
+        self.is_root = False
+
+        self.parent = None
+        self.children = []
+
+        self.code = None
+        self.description = None
+        self._data = None
+
+
+    def __repr__(self):
+        parent_code = self.parent.code if self.parent else None
+
+        if self.is_root:
+            return "<Root Node>"
+
+        return (
+            "<Node '{}' - `{}` [parent is '{}' | {} children]>"
+            "".format(self.code, self.description, parent_code,
+                      len(self.children))
+        )
+
+    def iter_depth_first(self, level=0):
+        """Depths first tree traversal rooted at this node."""
+        if level > 0:
+            yield level, self
+
+        for child in self.children:
+            yield from child.iter_depth_first(level + 1)
+
+
+    def iter_ancestors(self):
+        """Returns the chain of ancestors up to the root."""
+        if self.parent is None:
+            return
+
+        else:
+            yield self.parent
+            yield from self.parent.iter_ancestors()
+
+    @classmethod
+    def from_adjacency_list(cls, li):
+        """Build the tree from an adjacency list.
+
+        The form of the adjacency list is:
+        (code, parent, description=None, data=None)
+
+        """
+        root = cls()
+        root.is_root = True
+
+        node_dict = {}
+
+        # First create all nodes.
+        for code, parent, description, data in li:
+            n = cls()
+
+            n.code = code
+            n.description = description
+            n._data = data
+            node_dict[code] = n
+
+        # Set relationships.
+        for code, parent, description, data in li:
+            n = node_dict[code]
+
+            if parent is None:
+                n.parent = root
+                root.children.append(n)
+
+            else:
+                n.parent = node_dict[parent]
+                n.parent.children.append(n)
+
+        return root
