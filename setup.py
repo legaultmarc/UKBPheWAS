@@ -81,8 +81,7 @@ def setup_packages():
         ],
         python_requires='>=3.6',
         include_package_data=True,
-        install_requires=["pyarrow>=0.15.1", "pandas>=0.25.2",
-                          "pyzmq>=18.1.0"],
+        install_requires=["pandas>=0.25.2", "pyzmq>=18.1.0"],
         zip_safe=False,
         cmdclass={
             "install": CustomInstall,
