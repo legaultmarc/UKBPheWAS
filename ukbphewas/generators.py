@@ -40,6 +40,8 @@ def data_generator_continuous_variables(configuration, _normalize=True,
 
     raw_data = configuration.get_cache()["continuous"]
 
+    raw_data["variable"] = "cont_" + raw_data["variable"].astype(str)
+
     # Pivot into wide format.
     raw_data = raw_data.pivot_table(
         index="sample_id",
@@ -62,7 +64,9 @@ def data_generator_continuous_variables(configuration, _normalize=True,
 
     n_generated = 0
 
-    columns = raw_data.columns if only_do is None else only_do
+    columns = raw_data.columns
+    if only_do is not None:
+        columns = [col for col in raw_data.columns if col in only_do]
 
     for col in columns:
         if col == "sample_id":
@@ -105,9 +109,6 @@ def data_generator_self_reported(configuration, only_do=None):
         }
     )
 
-    if only_do is not None:
-        sr_coding = sr_coding.loc[sr_coding.node.isin(only_do), :]
-
     tree = Node.from_adjacency_list([
         # We use Node's _data attribute to store coding.
         (
@@ -118,6 +119,9 @@ def data_generator_self_reported(configuration, only_do=None):
         )
         for _, row in sr_coding.iterrows()
     ])
+
+    if only_do is not None:
+        sr_coding = sr_coding.loc[sr_coding.node_id.isin(only_do), :]
 
     for _, coding in sr_coding.iterrows():
         if coding.coding == "99999":
@@ -142,7 +146,7 @@ def data_generator_self_reported(configuration, only_do=None):
             ["sample_id", "y"]
         ].rename(columns={"sample_id": "eid"})
 
-        if (cur.y == 1).sum() < configuration.min_num_cases:
+        if (cur.y == 1).sum() < configuration.binary_conf.min_num_cases:
             continue
 
         # Exclude individuals with a parent disease from controls.
@@ -185,7 +189,16 @@ def data_generator_cv_endpoints(configuration, only_do=None):
             "analysis_type": "CV_ENDPOINTS"
         }
 
-        yield (metadata, data[["sample_id", col].rename(columns={col: "y"})])
+        # We only yield cases.
+        data = data.loc[data[col] == 1, :]
+
+        yield (
+            metadata,
+            data[["sample_id", col]].rename(columns={
+                col: "y",
+                "sample_id": "eid",
+            })
+        )
 
         n_generated += 1
 
