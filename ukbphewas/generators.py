@@ -123,10 +123,14 @@ def data_generator_self_reported(configuration, only_do=None):
     if only_do is not None:
         sr_coding = sr_coding.loc[sr_coding.node_id.isin(only_do), :]
 
+    n_generated = 0
     for _, coding in sr_coding.iterrows():
         if coding.coding == "99999":
             # Skip unclassifiable.
             continue
+
+        if configuration.limit and n_generated >= configuration.limit:
+            break
 
         # Find all children and code as cases.
         n = [node for _, node in tree.iter_depth_first()
@@ -162,6 +166,8 @@ def data_generator_self_reported(configuration, only_do=None):
         cur = pd.concat((cur, exclusion_frame))
 
         yield (meta, cur.reset_index(drop=True))
+
+        n_generated += 1
 
 
 @analysis_type("CV_ENDPOINTS")
