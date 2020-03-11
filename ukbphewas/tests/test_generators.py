@@ -275,17 +275,17 @@ def test_continuous_data_generator():
 
     expected = [
         {
-            "variable_id": "v1",
+            "variable_id": "cont_v1",
             "data": pd.DataFrame({
                 "sample_id": ["s1", "s2", "s3"],
-                "v1": [0.0, 1.0, 2.0]
+                "cont_v1": [0.0, 1.0, 2.0]
             })
         },
         {
-            "variable_id": "v2",
+            "variable_id": "cont_v2",
             "data": pd.DataFrame({
                 "sample_id": ["s1", "s2"],
-                "v2": [3.0, 4.0]
+                "cont_v2": [3.0, 4.0]
             })
         },
     ]
