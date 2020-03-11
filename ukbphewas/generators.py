@@ -94,12 +94,14 @@ def data_generator_continuous_variables(configuration, _normalize=True,
 def data_generator_self_reported(configuration, only_do=None):
     cache = configuration.get_cache()
 
-    # TODO apply configuration subset!
-
     # sample_id, disease_code, disease
     # which represent sample_id, coding, description
     data = cache["self_reported_diseases"]
     data["y"] = 1.0
+
+    # Apply subset.
+    if configuration.subset:
+        data = data.loc[data.sample_id.isin(configuration.subset), :].copy()
 
     # Contains coding, meaning, selectable, node, parent
     sr_coding = pd.read_csv(
@@ -175,11 +177,11 @@ def data_generator_cv_endpoints(configuration, only_do=None):
     cache = configuration.get_cache()
     data = cache["cv_endpoints"]
 
-    # TODO apply configuration subset!
+    # Apply subset.
+    if configuration.subset:
+        data = data.loc[data.eid.isin(configuration.subset), :].copy()
 
-    data.rename(columns={"eid": "sample_id"})
-
-    cols = [i for i in data.columns if i != "sample_id"]
+    cols = [i for i in data.columns if i != "eid"]
 
     if only_do is not None:
         only_do = set(only_do)
@@ -200,10 +202,7 @@ def data_generator_cv_endpoints(configuration, only_do=None):
 
         yield (
             metadata,
-            data[["sample_id", col]].rename(columns={
-                col: "y",
-                "sample_id": "eid",
-            })
+            data[["eid", col]].rename(columns={col: "y"})
         )
 
         n_generated += 1
