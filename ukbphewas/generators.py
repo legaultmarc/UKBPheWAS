@@ -181,7 +181,7 @@ def data_generator_cv_endpoints(configuration, only_do=None):
     if configuration.subset:
         data = data.loc[data.eid.isin(configuration.subset), :].copy()
 
-    cols = [i for i in data.columns if i != "eid"]
+    cols = [i for i in data.columns if i != "sample_id"]
 
     if only_do is not None:
         only_do = set(only_do)
@@ -202,7 +202,10 @@ def data_generator_cv_endpoints(configuration, only_do=None):
 
         yield (
             metadata,
-            data[["eid", col]].rename(columns={col: "y"})
+            data[["sample_id", col]].rename(columns={
+                col: "y",
+                "sample_id": "eid"
+            })
         )
 
         n_generated += 1
