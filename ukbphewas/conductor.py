@@ -11,8 +11,13 @@ import uuid
 
 import numpy as np
 import pandas as pd
-import pyarrow.feather
+
 import zmq
+
+try:
+    import pyarrow.feather
+except ImportError:
+    pass
 
 
 from .configuration import Configuration
