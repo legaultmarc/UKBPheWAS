@@ -198,11 +198,11 @@ def data_generator_cv_endpoints(configuration, only_do=None):
         }
 
         # We only yield cases.
-        data = data.loc[data[col] == 1, :]
+        cur = data.loc[data[col] == 1, :]
 
         yield (
             metadata,
-            data[["sample_id", col]].rename(columns={
+            cur[["sample_id", col]].rename(columns={
                 col: "y",
                 "sample_id": "eid"
             })
