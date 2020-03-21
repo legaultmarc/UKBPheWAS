@@ -368,7 +368,8 @@ def data_generator_phecodes(configuration, only_do=None):
 
     # Read the phecode map for ICD10.
     icd10_to_phecode = pd.read_csv(
-        os.path.join(DATA_ROOT, "Phecode_map_v1_2_icd10_beta.csv.gz")
+        os.path.join(DATA_ROOT, "Phecode_map_v1_2_icd10_beta.csv.gz"),
+        dtype={"PHECODE": str}
     )
     icd10_to_phecode = icd10_to_phecode.iloc[:, :3]
     icd10_to_phecode.columns = ["icd10", "phecode", "exclude_phecode"]
@@ -382,7 +383,8 @@ def data_generator_phecodes(configuration, only_do=None):
 
     # Read the gender exclusions.
     gender_exclusions = pd.read_csv(
-        os.path.join(DATA_ROOT, "gender_restriction.csv.gz")
+        os.path.join(DATA_ROOT, "gender_restriction.csv.gz"),
+        dtype={"phecode": str}
     )
     gender_exclusions = gender_exclusions.set_index(
         "phecode", verify_integrity=True
@@ -398,7 +400,7 @@ def data_generator_phecodes(configuration, only_do=None):
             row.exclude_phecode
         )
 
-    # Preload the males and females if available to acclerate sex-based
+    # Preload the males and females if available to accelerate sex-based
     # exclusions.
     males = males_frame = analysis_male_only = None
     females = females_frame = analysis_female_only = None
@@ -434,7 +436,14 @@ def data_generator_phecodes(configuration, only_do=None):
             "analysis_type": "PHECODES",
         }
 
-        cur = data.loc[data.phecode == code, ["eid", "y"]]
+        # If code == 278, we should also include 278.*
+        # If it's 278.1 we shouldn't...
+        #
+        # Same goes if code is 008.5 it whould include 008.5*
+        # If it's 008.52 it shouldn't include parents.
+        cur = data.loc[
+            data.phecode.str[:len(code)] == code,
+        ["eid", "y"]]
 
         # Check gender exclusion
         if configuration.sample_sex_known():

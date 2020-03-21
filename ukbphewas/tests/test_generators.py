@@ -199,26 +199,26 @@ def test_phecodes_sex_exclusion():
     })
 
     expected = {
-        187.1: pd.DataFrame({
+        "187.1": pd.DataFrame({
             "eid": ["s1", "s2", "s4", "s5"],
             "y": [1, 1, np.nan, np.nan]
         }),
         # 411.2 excludes Phecodes 410-414.99 (so s5 and s6)
-        411.2: pd.DataFrame({
+        "411.2": pd.DataFrame({
             "eid": ["s3", "s5", "s6"],
             "y": [1, np.nan, np.nan]
         }),
-        174.11: pd.DataFrame({
+        "174.11": pd.DataFrame({
             "eid": ["s1", "s2", "s4", "s6"],
             "y": [np.nan, np.nan, 1, np.nan]
         }),
         # 411.8 excludes Phecodes 410-414.99 (so s3 and s6)
-        411.8: pd.DataFrame({
+        "411.8": pd.DataFrame({
             "eid": ["s3", "s5", "s6"],
             "y": [np.nan, 1, np.nan]
         }),
         # 411.1 excludes Phecodes 410-414.99 (so s3 and s5)
-        411.1: pd.DataFrame({
+        "411.1": pd.DataFrame({
             "eid": ["s3", "s5", "s6"],
             "y": [np.nan, np.nan, 1]
         })
@@ -249,9 +249,9 @@ def test_phecodes_data_generator():
     })}
 
     expected_status = {
-        411.2: [1, 1, 1, 0, np.nan],
-        8.5: [0, 0, 0, 1, 0],
-        414: [np.nan, np.nan, np.nan, 1]
+        "411.2": [1, 1, 1, 0, np.nan],
+        "008.5": [0, 0, 0, 1, 0],
+        "414": [np.nan, np.nan, np.nan, 1]
     }
 
     for meta, data in data_generator_phecodes(conf):
