@@ -502,6 +502,9 @@ def data_generator_phecodes(configuration, only_do=None):
 
             cur = pd.concat((cur, samples_to_exclude), axis=0)
 
+        if (cur.y == 1).sum() < configuration.binary_conf.min_num_cases:
+            continue
+
         yield (metadata, cur)
 
         n_generated += 1
