@@ -182,6 +182,7 @@ def test_icd10_block_data_generator():
 
 def test_phecodes_sex_exclusion():
     conf = DummyConfiguration()
+    conf.binary_conf = DummyLogistic()
 
     # 187.1 is male only (C60, C63, ...)
     # 174.11 is female only (C50, ...)
@@ -230,6 +231,11 @@ def test_phecodes_sex_exclusion():
         expct = expected[meta["variable_id"]]
         data = data.sort_values("eid").reset_index(drop=True)
 
+        print(i)
+        print(meta)
+        print(data)
+        print("---")
+
         pd.testing.assert_frame_equal(expct, data)
 
     assert i == len(expected) - 1
@@ -237,6 +243,7 @@ def test_phecodes_sex_exclusion():
 
 def test_phecodes_data_generator():
     conf = DummyConfiguration()
+    conf.binary_conf = DummyLogistic()
 
     # We'll simulate:
     # - Some cases of 411.2

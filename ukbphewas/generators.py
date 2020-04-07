@@ -1,4 +1,5 @@
 import functools
+import collections
 import os
 from typing import Tuple, Sequence
 
@@ -352,6 +353,12 @@ def phecode_in_exclusion_range(code: str,
     return False
 
 
+SexExclusion = collections.namedtuple(
+    "SexExclusion",
+    ("male_only", "female_only")
+)
+
+
 @analysis_type("PHECODES")
 def data_generator_phecodes(configuration, only_do=None):
     data = configuration.get_cache()["diseases"]
@@ -447,7 +454,14 @@ def data_generator_phecodes(configuration, only_do=None):
 
         # Check gender exclusion
         if configuration.sample_sex_known():
-            sex_excl = gender_exclusions.loc[code, :]
+            if code in gender_exclusions.index:
+                print("WAZZA")
+                sex_excl = gender_exclusions.loc[code, :]
+
+            else:
+                # If it's not in the metadata file, we assume that both sexes
+                # should be analyzed.
+                sex_excl = SexExclusion(False, False)
 
             if sex_excl.male_only:
                 if analysis_female_only:
