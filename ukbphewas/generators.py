@@ -455,7 +455,6 @@ def data_generator_phecodes(configuration, only_do=None):
         # Check gender exclusion
         if configuration.sample_sex_known():
             if code in gender_exclusions.index:
-                print("WAZZA")
                 sex_excl = gender_exclusions.loc[code, :]
 
             else:
