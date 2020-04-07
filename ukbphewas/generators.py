@@ -180,7 +180,7 @@ def data_generator_cv_endpoints(configuration, only_do=None):
 
     # Apply subset.
     if configuration.subset:
-        data = data.loc[data.eid.isin(configuration.subset), :].copy()
+        data = data.loc[data.sample_id.isin(configuration.subset), :].copy()
 
     cols = [i for i in data.columns if i != "sample_id"]
 
