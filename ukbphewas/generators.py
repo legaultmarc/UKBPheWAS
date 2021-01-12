@@ -280,6 +280,8 @@ def data_generator_icd10_block(configuration, only_do=None):
 
     if only_do is not None:
         icd10_blocks = icd10_blocks.loc[icd10_blocks.block.isin(only_do), :]
+        if icd10_blocks.shape[0] == 0:
+            return
 
     lr = icd10_blocks.block.str.split("-", expand=True)
     lr.columns = ["left", "right"]
