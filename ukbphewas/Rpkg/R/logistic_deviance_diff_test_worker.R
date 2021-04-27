@@ -81,10 +81,10 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
 
   # Callback for when data is to be processed from the queue.
   do.work <- function(metadata, data) {
-    # Single column eid.
+    # Single column sample_id
     data <- deserialize(data)
-    cases <- as.character(data[data[, "y"] == 1, "eid"])
-    to_exclude <- as.character(data[is.na(data[, "y"]), "eid"])
+    cases <- as.character(data[data[, "y"] == 1, "sample_id"])
+    to_exclude <- as.character(data[is.na(data[, "y"]), "sample_id"])
 
     min_num_cases <- conf$binary_conf$min_num_cases
 

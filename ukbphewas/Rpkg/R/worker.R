@@ -2,58 +2,24 @@ library(rzmq)
 library(rjson)
 
 
-read_and_cast_feather <- function(filename) {
-  df <- as.data.frame(arrow::read_feather(filename))
-
-  for (i in 1:ncol(df)) {
-    if (names(df)[i] != "sample_id") {
-      df[, i] <- as.numeric(df[, i])
-    }
-  }
-
-  df
-}
-
-
+# Get the covariables from the databundle.
+#
+# This function looks at a data source called 'worker_data'.
+# It also applies subsetting if required.
 get_xs <- function(configuration) {
-  get_reader <- function(filename) {
-    if (endsWith(filename, ".feather")) {
-      return(read_and_cast_feather)
-    } else if (endsWith(filename, ".csv") || endsWith(filename, ".csv.gz")) {
-      return(read.csv)
-    } else {
-      stop("Invalid covariable file.")
-    }
+  cat(paste(
+    "R: Reading worker data from databundle '", configuration$databundle_path,
+    "'\n"
+  ))
+  data <- databundle.deserialize.parquet(
+    configuration$databundle_path, "worker_data"
+  )
+
+  if (!is.null(configuration$subset)) {
+    data <- subset(data, sample_id %in% configuration$subset)
   }
 
-  # rjson parses a list with a single string as a character vector.
-  # We have to explicitly handle it.
-  if (length(configuration$covars_filenames) == 1) {
-    filename <- configuration$covars_filenames
-    data <- get_reader(filename)(filename)
-    data$sample_id <- as.character(data$sample_id)
-    return(data)
-  }
-
-  # This is the case where multiple data files need to be joined together.
-  out <- NULL
-  for (filename in configuration$covars_filenames) {
-    cat(paste0("R: Reading covars ('", filename, "').\n"))
-
-    cur <- get_reader(filename)(filename)
-    cur$sample_id <- as.character(cur$sample_id)
-
-    if (is.null(out)) {
-      out <- cur
-    } else {
-      out <- merge(out, cur, by.x = "sample_id", by.y = "sample_id",
-                   all.x = T, all.y = T)
-    }
-  }
-
-  out$sample_id <- as.character(out$sample_id)
-
-  out
+  return(data)
 }
 
 
@@ -67,6 +33,35 @@ remove_sex_from_rhs <- function(rhs, sex_column) {
 
 char_to_terms <- function(rhs) {
   labels(terms(as.formula(paste0("~", rhs))))
+}
+
+
+# Remove columns that have no variance.
+#
+# This is typically useful if, for example, sex is included in the right hand
+# side but individuals of one sex get excluded by the data generator.
+#
+# The freeze.col.idx argument is used so that some columns (e.g. the first one
+# corresponding to the outcome) do not get affected by the filter.
+drop_columns_with_no_variance <- function(mat,
+                                          freeze.col.idx = 1,
+                                          verbose = T) {
+  n_unique <- sapply(mat, function(x) length(unique(x)))
+
+  keep_cols <- n_unique > 1
+
+  # Apply the freeze
+  keep_cols[freeze.col.idx] <- TRUE
+  dropped_cols <- names(mat)[!keep_cols]
+
+  if (verbose && length(dropped_cols) > 0) {
+    cat(paste0("R: Dropping columns with no variance: '", dropped_cols, "'\n"))
+  }
+
+  list(
+    dropped_cols = dropped_cols,
+    mat = mat[, keep_cols]
+  )
 }
 
 

@@ -35,13 +35,43 @@ class analysis_type(object):
         return data_gen
 
 
+def requires_data_source(ds_name):
+    """Decorator to explicitly define the expected data source names.
+
+    Example:
+
+    @requires_data_source("continuous_variables")
+    def data_generator_continuous_variables(*args, **kwargs):
+        pass
+
+    """
+    def wrapper(f):
+        def check_config(configuration, *args, **kwargs):
+            if ds_name not in configuration._cache:
+                raise MissingDataSourceError(ds_name)
+
+            return f(configuration, *args, **kwargs)
+
+        return check_config
+
+    return wrapper
+
+
+class MissingDataSourceError(Exception):
+    def __init__(self, data_source_name):
+        self.data_source_name = data_source_name
+        super().__init__("Could not initialize data generator because of "
+                        f"missing data source '{data_source_name}'.")
+
+
+@requires_data_source("continuous_variables")
 @analysis_type("CONTINUOUS_VARIABLE")
 def data_generator_continuous_variables(configuration, _normalize=True,
                                         only_do=None):
 
-    raw_data = configuration.get_cache()["continuous"]
+    raw_data = configuration.get_cache()["continuous_variables"]
 
-    raw_data["variable"] = "cont_" + raw_data["variable"].astype(str)
+    raw_data["variable"] = "cont_" + raw_data["variable"].astype("string")
 
     # Pivot into wide format.
     raw_data = raw_data.pivot_table(
@@ -69,6 +99,7 @@ def data_generator_continuous_variables(configuration, _normalize=True,
     if only_do is not None:
         columns = [col for col in raw_data.columns if col in only_do]
 
+    print("Py: Data generator (continuous) warmed up.")
     for col in columns:
         if col == "sample_id":
             continue
@@ -91,6 +122,7 @@ def data_generator_continuous_variables(configuration, _normalize=True,
         n_generated += 1
 
 
+@requires_data_source("self_reported_diseases")
 @analysis_type("SELF_REPORTED")
 def data_generator_self_reported(configuration, only_do=None):
     cache = configuration.get_cache()
@@ -151,7 +183,7 @@ def data_generator_self_reported(configuration, only_do=None):
         cur = data.loc[
             data.disease_code.isin(all_relevant_codings),
             ["sample_id", "y"]
-        ].rename(columns={"sample_id": "eid"})
+        ]
 
         if (cur.y == 1).sum() < configuration.binary_conf.min_num_cases:
             continue
@@ -162,8 +194,8 @@ def data_generator_self_reported(configuration, only_do=None):
             data.disease_code.isin(parent_codings),
             "sample_id"
         ])
-        to_exclude = parent_cases.difference(cur.eid)
-        exclusion_frame = pd.DataFrame({"eid": to_exclude})
+        to_exclude = parent_cases.difference(cur.sample_id)
+        exclusion_frame = pd.DataFrame({"sample_id": to_exclude})
         exclusion_frame["y"] = np.nan
 
         cur = pd.concat((cur, exclusion_frame))
@@ -173,10 +205,11 @@ def data_generator_self_reported(configuration, only_do=None):
         n_generated += 1
 
 
+@requires_data_source("cardiovascular_outcomes")
 @analysis_type("CV_ENDPOINTS")
 def data_generator_cv_endpoints(configuration, only_do=None):
     cache = configuration.get_cache()
-    data = cache["cv_endpoints"]
+    data = cache["cardiovascular_outcomes"]
 
     # Apply subset.
     if configuration.subset:
@@ -203,36 +236,34 @@ def data_generator_cv_endpoints(configuration, only_do=None):
 
         yield (
             metadata,
-            cur[["sample_id", col]].rename(columns={
-                col: "y",
-                "sample_id": "eid"
-            })
+            cur[["sample_id", col]].rename(columns={col: "y"})
         )
 
         n_generated += 1
 
 
+@requires_data_source("icd10")
 @analysis_type("ICD10_3CHAR")
 def data_generator_icd10_3chars(configuration, only_do=None):
     cache = configuration.get_cache()
-    data = cache["diseases"]
+    data = cache["icd10"]
 
     # Apply subset.
     if configuration.subset:
-        data = data.loc[data.eid.isin(configuration.subset), :].copy()
+        data = data.loc[data.sample_id.isin(configuration.subset), :].copy()
 
-    data.diag_icd10 = data.diag_icd10.str[:3]
+    data.icd10 = data.icd10.str[:3]
 
     data["y"] = 1
 
-    codes = data[["diag_icd10"]].drop_duplicates()
+    codes = data[["icd10"]].drop_duplicates()
 
     if only_do is not None:
-        codes = codes.loc[codes.diag_icd10.isin(only_do), :]
+        codes = codes.loc[codes.icd10.isin(only_do), :]
 
     # Add a column for cancer codes.
-    codes["chapter"] = codes.diag_icd10.str.get(0)
-    codes["num"] = codes.diag_icd10.str.slice(1, 3).astype(int)
+    codes["chapter"] = codes.icd10.str.get(0)
+    codes["num"] = codes.icd10.str.slice(1, 3).astype(int)
     codes["is_cancer"] = ((codes["chapter"] == "C") |
                           ((codes["chapter"] == "D") & (codes["num"] <= 48)))\
                          .astype(int)
@@ -249,11 +280,11 @@ def data_generator_icd10_3chars(configuration, only_do=None):
             break
 
         metadata = {
-            "variable_id": row.diag_icd10,
+            "variable_id": row.icd10,
             "analysis_type": "ICD10_3CHAR",
         }
 
-        cur = data.loc[data.diag_icd10 == row.diag_icd10, ["eid", "y"]]
+        cur = data.loc[data.icd10 == row.icd10, ["sample_id", "y"]]
 
         if cur.shape[0] < configuration.binary_conf.min_num_cases:
             continue
@@ -261,7 +292,7 @@ def data_generator_icd10_3chars(configuration, only_do=None):
         if row.is_cancer:
             # Exclude other cancer cases from controls.
             to_exclude = pd.DataFrame({
-                "eid": cancer_excl_from_controls.difference(cur.eid)
+                "sample_id": cancer_excl_from_controls.difference(cur.sample_id)
             })
             to_exclude["y"] = np.nan
 
@@ -271,9 +302,10 @@ def data_generator_icd10_3chars(configuration, only_do=None):
         n_generated += 1
 
 
+@requires_data_source("icd10")
 @analysis_type("ICD10_BLOCK")
 def data_generator_icd10_block(configuration, only_do=None):
-    data = configuration.get_cache()["diseases"]
+    data = configuration.get_cache()["icd10"]
 
     # Read the ICD10 block metadata.
     icd10_blocks = pd.read_csv(os.path.join(DATA_ROOT, "icd10_blocks.csv.gz"))
@@ -296,12 +328,12 @@ def data_generator_icd10_block(configuration, only_do=None):
 
     # Apply subset.
     if configuration.subset:
-        data = data.loc[data.eid.isin(configuration.subset), :].copy()
+        data = data.loc[data.sample_id.isin(configuration.subset), :].copy()
 
     data["y"] = 1
 
-    data["chapter"] = data.diag_icd10.str.get(0)
-    data["num"] = data.diag_icd10.str.slice(1, 3).astype(int)
+    data["chapter"] = data.icd10.str.get(0)
+    data["num"] = data.icd10.str.slice(1, 3).astype(int)
 
     n_generated = 0
     for _, row in icd10_blocks.iterrows():
@@ -310,7 +342,7 @@ def data_generator_icd10_block(configuration, only_do=None):
 
         # Find all individuals with a code in the block.
         cur = data.loc[
-            (data.diag_icd10.str.get(0) == row.left_chapter) & # Match chapter
+            (data.icd10.str.get(0) == row.left_chapter) & # Match chapter
             ((row.left_num <= data.num) &  # Match number
              (data.num <= row.right_num)), :
         ]
@@ -323,7 +355,7 @@ def data_generator_icd10_block(configuration, only_do=None):
             "analysis_type": "ICD10_BLOCK",
         }
 
-        yield metadata, cur[["eid", "y"]].reset_index(drop=True)
+        yield metadata, cur[["sample_id", "y"]].reset_index(drop=True)
 
         n_generated += 1
 
@@ -361,19 +393,20 @@ SexExclusion = collections.namedtuple(
 )
 
 
+@requires_data_source("icd10")
 @analysis_type("PHECODES")
 def data_generator_phecodes(configuration, only_do=None):
-    data = configuration.get_cache()["diseases"]
+    data = configuration.get_cache()["icd10"]
 
     # Strip dots from ICD10 codes.
-    data.diag_icd10 = data.diag_icd10.str.replace(".", "", regex=False)
+    data.icd10 = data.icd10.str.replace(".", "", regex=False)
 
     # Apply subset.
     if configuration.subset:
-        data = data.loc[data.eid.isin(configuration.subset), :]
+        data = data.loc[data.sample_id.isin(configuration.subset), :]
 
     # Get an index of all samples with data.
-    all_samples = pd.Index(data.eid)
+    all_samples = pd.Index(data.sample_id)
 
     # Read the phecode map for ICD10.
     icd10_to_phecode = pd.read_csv(
@@ -388,7 +421,7 @@ def data_generator_phecodes(configuration, only_do=None):
 
     # Join with the diseases.
     data = pd.merge(data, icd10_to_phecode,
-                    left_on="diag_icd10", right_on="icd10")
+                    left_on="icd10", right_on="icd10")
 
     # Read the gender exclusions.
     gender_exclusions = pd.read_csv(
@@ -415,10 +448,10 @@ def data_generator_phecodes(configuration, only_do=None):
     females = females_frame = analysis_female_only = None
     if configuration.sample_sex_known():
         males = configuration.get_males()
-        males_frame = pd.DataFrame({"eid": males, "y": np.nan})
+        males_frame = pd.DataFrame({"sample_id": males, "y": np.nan})
 
         females = configuration.get_females()
-        females_frame = pd.DataFrame({"eid": females, "y": np.nan})
+        females_frame = pd.DataFrame({"sample_id": females, "y": np.nan})
 
         # Check if analysis is already male or female only.
         # If this is the case, we'll skip the exclusions.
@@ -452,7 +485,7 @@ def data_generator_phecodes(configuration, only_do=None):
         # If it's 008.52 it shouldn't include parents.
         cur = data.loc[
             data.phecode.str[:len(code)] == code,
-        ["eid", "y"]]
+        ["sample_id", "y"]]
 
         # Check gender exclusion
         if configuration.sample_sex_known():
@@ -505,14 +538,14 @@ def data_generator_phecodes(configuration, only_do=None):
             # Get samples that have excluded codes.
             samples_to_exclude = pd.Index(data.loc[
                 data.phecode.isin(codes_to_exclude),
-                "eid"
+                "sample_id"
             ].drop_duplicates())
 
             # We take the samples that are not in the cases to exclude
             # (exclude from the controls).
-            samples_to_exclude = samples_to_exclude.difference(cur.eid)
+            samples_to_exclude = samples_to_exclude.difference(cur.sample_id)
             samples_to_exclude = pd.DataFrame(
-                {"eid": samples_to_exclude, "y": np.nan}
+                {"sample_id": samples_to_exclude, "y": np.nan}
             )
 
             cur = pd.concat((cur, samples_to_exclude), axis=0)

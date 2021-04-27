@@ -5,9 +5,9 @@ import json
 from typing import Dict, Any, TypeVar, Type
 
 import pandas as pd
+from databundle import get_serde_from_filename
 
 from . import Rpkg
-from .db import load_or_create_data_cache
 
 
 class _BinaryConfiguration(object):
@@ -19,15 +19,7 @@ class SkipBinary(_BinaryConfiguration):
 
 
 class DoBinary(_BinaryConfiguration):
-    def __init__(
-        self,
-        include_death_records=True,
-        include_secondary_hospit=True,
-        min_num_cases=50,
-        skip_icd10_raw=False,
-    ):
-        self.include_death_records = include_death_records
-        self.include_secondary_hospit = include_secondary_hospit
+    def __init__(self, min_num_cases=50, skip_icd10_raw=False):
         self.min_num_cases = min_num_cases
         self.skip_icd10_raw = skip_icd10_raw
 
@@ -43,6 +35,15 @@ class DoBinaryLRT(DoBinary):
         super().__init__(*args, **kwargs)
 
 
+class DoBinaryDescriptive(DoBinary):
+    def __init__(self, *args, **kwargs):
+        self.worker_script = os.path.abspath(os.path.join(
+            os.path.dirname(Rpkg.__file__),
+            "R", "binary_descriptive_statistics_worker.R"
+        ))
+        super().__init__(*args, **kwargs)
+
+
 class _LinearConfiguration(object):
     pass
 
@@ -52,17 +53,24 @@ class SkipLinear(_LinearConfiguration):
 
 
 class DoLinear(_LinearConfiguration):
-    def __init__(self):
-        raise NotImplementedError()
+    pass
 
 
-class DoFTest(_LinearConfiguration):
+class DoContinuousDescriptive(DoLinear):
+    def __init__(self, *args, **kwargs):
+        self.worker_script = os.path.abspath(os.path.join(
+            os.path.dirname(Rpkg.__file__),
+            "R", "continuous_descriptive_statistics_worker.R"
+        ))
+        super().__init__(*args, **kwargs)
+
+
+class DoFTest(DoLinear):
     def __init__(self, augmented_variables):
         self.worker_script = os.path.abspath(os.path.join(
             os.path.dirname(Rpkg.__file__),
             "R", "linear_f_test_worker.R"
         ))
-
         self.augmented_variables = augmented_variables
 
 
@@ -72,36 +80,23 @@ T = TypeVar("T")
 class Configuration(object):
     def __init__(
         self,
-        covars_filenames,
+        databundle_path,
         model_rhs,
-        db_password=None,
         limit=None,
-        continuous_variables_path="/data/projects/uk_biobank/data/reports/SGR-2094/",
-        raw_data_cache=None,
         subset=None,
-
         linear_conf=SkipLinear(),
         binary_conf=SkipBinary(),
-
     ):
 
-        # We accept many covar filenames which will be (outer) joined if needed
-        if isinstance(covars_filenames, str):
-            covars_filenames = [covars_filenames]
+        self.databundle_path = databundle_path
 
-        self.covars_filenames = [
-            os.path.abspath(fn) for fn in covars_filenames
-        ]
-
-        self.raw_data_cache = os.path.abspath(raw_data_cache)
+        # Using _ notation automatically excludes from json serialization.
+        # Access should be done using the get_databundle_serde() method.
+        self._databundle_serde = get_serde_from_filename(databundle_path)
         self._cache = None
 
         self.model_rhs = model_rhs
-        self.db_password = db_password
         self.limit = limit
-        self.continuous_variables_path = os.path.abspath(
-            continuous_variables_path
-        )
         self.subset = subset
 
         # Set automatically by CLI if --male-only or --female-only
@@ -112,10 +107,13 @@ class Configuration(object):
         self._sample_sex = None
 
         # Set by CLI if --sex-column is provided
-        self.sex_column = None
+        self.sex_path = None
 
         self.linear_conf = linear_conf
         self.binary_conf = binary_conf
+
+    def get_databundle_serde(self):
+        return self._databundle_serde
 
     def should_do_linear(self):
         return not isinstance(self.linear_conf, SkipLinear)
@@ -189,5 +187,5 @@ class Configuration(object):
         if self._cache is not None:
             return self._cache
 
-        self._cache = load_or_create_data_cache(self)
+        self._cache = self.get_databundle_serde().deserialize()
         return self._cache

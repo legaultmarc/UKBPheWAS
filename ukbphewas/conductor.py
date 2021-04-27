@@ -66,7 +66,8 @@ def send_data(socket, metadata, data):
     ])
 
 
-def monitor(ctx, state):
+def monitor(state):
+    ctx = zmq.Context()
     monitor_sock = ctx.socket(zmq.REP)
 
     port = monitor_sock.bind_to_random_port("tcp://0.0.0.0")
@@ -91,7 +92,8 @@ def monitor(ctx, state):
             monitor_sock.send(b"WEIRD")
 
 
-def collect_results(output_filename):
+def teardown_analysis(output_filename):
+    """Teardown a sandboxed analysis by collecting worker results."""
     # Infer the analysis id from current directory.
     cwd = os.getcwd()
     analysis_id = os.path.split(cwd)[-1]
@@ -147,11 +149,14 @@ def run_phewas(configuration, n_workers, data_generators, output_filename,
         monitor_state = monitor_manager.dict()
         monitor_t = multiprocessing.Process(
             target=monitor,
-            args=(context, monitor_state),
+            args=(monitor_state, ),
             daemon=True
         )
         processes.append(monitor_t)
+
+        print("Py: Starting monitor process")
         monitor_t.start()
+        print("Py: ok")
 
         while True:
             # Wait for the monitor to be ready.
@@ -215,9 +220,6 @@ def run_phewas(configuration, n_workers, data_generators, output_filename,
             else:
                 raise ValueError()
 
-        # Collect results.
-        collect_results(output_filename)
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -250,9 +252,10 @@ def parse_args():
 
     # Sex-based filtering
     parser.add_argument(
-        "--sex-column",
-        help="Label of the column with the sex variable "
-             "(used for subsetting).",
+        "--sex-path",
+        help="Path to the sex data in the databundle. For example "
+             "'worker_data.male' where worker_data is the name of the data "
+             "source (this information is used for subsetting).",
         default=None
     )
 
@@ -263,40 +266,33 @@ def parse_args():
     return parser.parse_args()
 
 
-def detect_sample_sex(configuration, sex_column):
+def detect_sample_sex(configuration, sex_path):
     # Look for sex_column in the covariables.
     sex = None
+    cache = configuration.get_cache()
 
-    for filename in configuration.covars_filenames:
-        if filename.endswith(".csv") or filename.endswith(".csv.gz"):
-            df = pd.read_csv(filename)
+    ds_name, sex_col = sex_path.split(".")
 
-        elif filename.endswith(".feather"):
-            df = pyarrow.feather.read_feather(filename)
+    if ds_name not in cache:
+        raise ValueError("Could not find data source '{}' which is supposed "
+                         "to hold sex information.".format(ds_name))
 
-        else:
-            raise ValueError("Unknown format for the covariables.")
+    if sex_col not in cache[ds_name]:
+        raise ValueError("Could not find sex column '{}' in data source '{}'"
+                         "".format(sex_col, ds_name))
 
-        if sex_column in df.columns:
-            sex = df[["sample_id", sex_column]]
-            break
+    sex = cache[ds_name][["sample_id", sex_col]]
 
-    if sex is None:
-        raise ValueError(
-            f"Could not find column '{sex_column}' in covariables."
-        )
-
-    values = sex[sex_column].unique()
-    values = set(values[~np.isnan(values)])
+    values = sex[sex_col].dropna().unique()
 
     if set(values) == {0, 1}:
         # Sex is encoded as a boolean vector. Try to infer meaning from
         # column name.
-        if sex_column == "male":
+        if sex_col == "male":
             # Do Nothing
             pass
 
-        elif sex_column == "female":
+        elif sex_col == "female":
             sex["male"] = 1 - sex["female"]
 
         else:
@@ -304,16 +300,16 @@ def detect_sample_sex(configuration, sex_column):
                 "Can't infer sex meaning from column '{}'. Name the sex "
                 "column 'male', 'female' or use male = 1, female = 2, "
                 "missing = 0."
-                "".format(sex_column)
+                "".format(sex_col)
             )
 
     elif set(values) == {0, 1, 2}:
         print("Assuming 1=male, 2=female, 0=missing for column '{}'."
-              "".format(sex_column))
+              "".format(sex_col))
 
         sex["male"] = np.nan
-        sex.loc[sex[sex_column] == 1, "male"] = 1
-        sex.loc[sex[sex_column] == 2, "male"] = 0
+        sex.loc[sex[sex_col] == 1, "male"] = 1
+        sex.loc[sex[sex_col] == 2, "male"] = 0
 
     # We don't keep individuals with unknown sex.
     return sex.set_index("sample_id", verify_integrity=True)["male"]
@@ -325,20 +321,20 @@ def main():
     # Parse the configuration.
     configuration = Configuration.from_file(args.configuration)
 
-    if args.sex_column:
+    if args.sex_path:
         # We will infer the sex of samples. Useful for subsetting or for
         # sex-based exclusions.
         configuration.set_sample_sex(
-            detect_sample_sex(configuration, args.sex_column)
+            detect_sample_sex(configuration, args.sex_path)
         )
 
-        configuration.sex_column = args.sex_column
+        configuration.sex_path = args.sex_path
 
     if args.male_only or args.female_only:
         configuration.sex_stratified = True
 
         if not configuration.sample_sex_known():
-            raise RuntimeError("Requested sex filtering, but not --sex-column "
+            raise RuntimeError("Requested sex filtering, but no --sex-path "
                                "provided. Or sex incorrectly detected.")
 
         if args.male_only:
@@ -424,7 +420,12 @@ def _run_phewas_in_sandbox(configuration, **kwargs):
     os.chdir(analysis_id)
 
     try:
+        # Run the PheWAS using the created temporary directory as the working
+        # directory.
         run_phewas(configuration, **kwargs)
+
+        # Collect results and remove temporary files.
+        teardown_analysis(kwargs["output_filename"])
     finally:
         os.chdir("..")
-        shutil.rmtree(analysis_id)
+        # shutil.rmtree(analysis_id)

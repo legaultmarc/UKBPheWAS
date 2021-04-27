@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import numpy as np
 
@@ -5,12 +7,15 @@ from ..generators import *
 from ..configuration import Configuration
 
 
+
+MOCK_DATABUNDLE = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "test_data", "mock_databundle.tar"
+))
+
+
 DummyConfiguration = lambda: Configuration(
-    covars_filenames = [],
-    model_rhs = None,
-    db_password = None,
-    limit = None,
-    raw_data_cache = ""
+    databundle_path=MOCK_DATABUNDLE,
+    model_rhs=None,
 )
 
 
@@ -41,57 +46,57 @@ def test_self_reported_generator():
         # Node 1092 is heart attack/myocardial infarction
         # Note that s2 is excluded because it is a "case" for a parent disease.
         1092: pd.DataFrame({
-            "eid": ["s1", "s2"],
+            "sample_id": ["s1", "s2"],
             "y": [1, np.nan]
         }),
         # Node 1082 is heart/cardiac problem
         1082: pd.DataFrame({
-            "eid": ["s1", "s2"],
+            "sample_id": ["s1", "s2"],
             "y": [1, 1]
         }),
         # Node 1071 is cardiovascular
         1071: pd.DataFrame({
-            "eid": ["s1", "s2"],
+            "sample_id": ["s1", "s2"],
             "y": [1, 1]
         }),
         # Node 1186 is pancreatitis
         1186: pd.DataFrame({
-            "eid": ["s3"],
+            "sample_id": ["s3"],
             "y": [1]
         }),
         # Node 1185 is pancreatic disease
         1185: pd.DataFrame({
-            "eid": ["s3"],
+            "sample_id": ["s3"],
             "y": [1]
         }),
         # Node 1156 is liver/biliary/pancreas problem
         1156: pd.DataFrame({
-            "eid": ["s3"],
+            "sample_id": ["s3"],
             "y": [1]
         }),
         # Node 1073 is gastrointestinal/abdominal
         1073: pd.DataFrame({
-            "eid": ["s3"],
+            "sample_id": ["s3"],
             "y": [1]
         }),
         # Node 1272 is encephalitis
         1272: pd.DataFrame({
-            "eid": ["s4"],
+            "sample_id": ["s4"],
             "y": [1]
         }),
         # Node 1270 is infection of nervous system
         1270: pd.DataFrame({
-            "eid": ["s4"],
+            "sample_id": ["s4"],
             "y": [1]
         }),
         # Node 1265 is neurology
         1265: pd.DataFrame({
-            "eid": ["s4"],
+            "sample_id": ["s4"],
             "y": [1]
         }),
         # Node 1076 is neurology/eye/psychiatry
         1076: pd.DataFrame({
-            "eid": ["s4"],
+            "sample_id": ["s4"],
             "y": [1]
         }),
     }
@@ -116,9 +121,9 @@ def test_icd10_3chars_cancer_exclusion():
     conf.binary_conf = DummyLogistic()
     conf._cache = {}
 
-    conf._cache["diseases"] = pd.DataFrame({
-        "eid": ["s1", "s2", "s3"],
-        "diag_icd10": ["C502", "C64", "I21"]
+    conf._cache["icd10"] = pd.DataFrame({
+        "sample_id": ["s1", "s2", "s3"],
+        "icd10": ["C502", "C64", "I21"]
     })
 
     conf._cache["cancer_excl_from_controls"] = pd.DataFrame({
@@ -127,15 +132,15 @@ def test_icd10_3chars_cancer_exclusion():
 
     expected = {
         "C50": pd.DataFrame({
-            "eid": ["s1", "s2"],
+            "sample_id": ["s1", "s2"],
             "y": [1, np.nan]
         }),
         "C64": pd.DataFrame({
-            "eid": ["s1", "s2"],
+            "sample_id": ["s1", "s2"],
             "y": [np.nan, 1]
         }),
         "I21": pd.DataFrame({
-            "eid": ["s3"],
+            "sample_id": ["s3"],
             "y": [1]
         }),
     }
@@ -144,7 +149,7 @@ def test_icd10_3chars_cancer_exclusion():
         assert meta["variable_id"] in expected
         expct = expected[meta["variable_id"]]
 
-        data = data.sort_values("eid").reset_index(drop=True)
+        data = data.sort_values("sample_id").reset_index(drop=True)
 
         pd.testing.assert_frame_equal(expct, data)
 
@@ -153,22 +158,22 @@ def test_icd10_block_data_generator():
     conf = DummyConfiguration()
     conf.binary_conf = DummyLogistic()
 
-    conf._cache = {"diseases": pd.DataFrame({
-        "eid": ["s1", "s2", "s3", "s4", "s5"],
-        "diag_icd10": ["I20", "I25.9", "I513", "A031", "I23.4"]
+    conf._cache = {"icd10": pd.DataFrame({
+        "sample_id": ["s1", "s2", "s3", "s4", "s5"],
+        "icd10": ["I20", "I25.9", "I513", "A031", "I23.4"]
     })}
 
     expected = {
         "A00-A09": pd.DataFrame({
-            "eid": ["s4"],
+            "sample_id": ["s4"],
             "y": [1]
         }),
         "I20-I25": pd.DataFrame({
-            "eid": ["s1", "s2", "s5"],
+            "sample_id": ["s1", "s2", "s5"],
             "y": [1, 1, 1]
         }),
         "I30-I52": pd.DataFrame({
-            "eid": ["s3"],
+            "sample_id": ["s3"],
             "y": [1]
         }),
     }
@@ -194,33 +199,33 @@ def test_phecodes_sex_exclusion():
     conf.set_sample_sex(sex)
 
     conf._cache = {}
-    conf._cache["diseases"] = pd.DataFrame({
-        "eid": ["s1", "s2", "s3", "s4", "s5", "s6"],
-        "diag_icd10": ["C60", "C63", "I21", "C50", "I25", "I200"],
+    conf._cache["icd10"] = pd.DataFrame({
+        "sample_id": ["s1", "s2", "s3", "s4", "s5", "s6"],
+        "icd10": ["C60", "C63", "I21", "C50", "I25", "I200"],
     })
 
     expected = {
         "187.1": pd.DataFrame({
-            "eid": ["s1", "s2", "s4", "s5"],
+            "sample_id": ["s1", "s2", "s4", "s5"],
             "y": [1, 1, np.nan, np.nan]
         }),
         # 411.2 excludes Phecodes 410-414.99 (so s5 and s6)
         "411.2": pd.DataFrame({
-            "eid": ["s3", "s5", "s6"],
+            "sample_id": ["s3", "s5", "s6"],
             "y": [1, np.nan, np.nan]
         }),
         "174.11": pd.DataFrame({
-            "eid": ["s1", "s2", "s4", "s6"],
+            "sample_id": ["s1", "s2", "s4", "s6"],
             "y": [np.nan, np.nan, 1, np.nan]
         }),
         # 411.8 excludes Phecodes 410-414.99 (so s3 and s6)
         "411.8": pd.DataFrame({
-            "eid": ["s3", "s5", "s6"],
+            "sample_id": ["s3", "s5", "s6"],
             "y": [np.nan, 1, np.nan]
         }),
         # 411.1 excludes Phecodes 410-414.99 (so s3 and s5)
         "411.1": pd.DataFrame({
-            "eid": ["s3", "s5", "s6"],
+            "sample_id": ["s3", "s5", "s6"],
             "y": [np.nan, np.nan, 1]
         })
     }
@@ -229,7 +234,7 @@ def test_phecodes_sex_exclusion():
         assert meta["variable_id"] in expected
 
         expct = expected[meta["variable_id"]]
-        data = data.sort_values("eid").reset_index(drop=True)
+        data = data.sort_values("sample_id").reset_index(drop=True)
 
         print(i)
         print(meta)
@@ -250,9 +255,9 @@ def test_phecodes_data_generator():
     # + I23.4 is not in that definition, but it's in the exclusion range.
     # - A an exclusion from controls
 
-    conf._cache = {"diseases": pd.DataFrame({
-        "eid": ["s1", "s2", "s3", "s4", "s5"],
-        "diag_icd10": ["I21", "I23.8", "I513", "A031", "I23.4"]
+    conf._cache = {"icd10": pd.DataFrame({
+        "sample_id": ["s1", "s2", "s3", "s4", "s5"],
+        "icd10": ["I21", "I23.8", "I513", "A031", "I23.4"]
     })}
 
     expected_status = {
@@ -267,14 +272,14 @@ def test_phecodes_data_generator():
         # Data generators never yield controls so we can drop them.
         expected = np.array([i for i in expected if i != 0])
 
-        data = data.sort_values("eid")
+        data = data.sort_values("sample_id")
 
         np.testing.assert_array_equal(data.y.values, expected)
 
 
 def test_continuous_data_generator():
     conf = DummyConfiguration()
-    conf._cache = {"continuous": pd.DataFrame({
+    conf._cache = {"continuous_variables": pd.DataFrame({
         "sample_id": ["s1", "s2", "s3", "s1", "s2"],
         "variable": ["v1", "v1", "v1", "v2", "v2"],
         "value": list(range(5))

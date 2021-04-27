@@ -9,6 +9,8 @@ dtypeToRType <- list(
 )
 
 
+# This is the deserialization function from the zeromq queue.
+# TODO: We could use a better representation from arrow here instead.
 deserialize <- function(data) {
     # First uint is metadata length.
     metadata_length <- readBin(data, what="integer", n=1)
@@ -43,4 +45,26 @@ deserialize <- function(data) {
     }
     
     as.data.frame(li, stringsAsFactors=FALSE)
+}
+
+
+# See https://github.com/legaultmarc/databundle
+# for main project description and up to date bindings.
+databundle.deserialize.parquet <- function(databundle_filename, data_source_name) {
+
+  if (!endsWith(data_source_name, ".parquet")) {
+    data_source_name <- paste0(data_source_name, ".parquet")
+  }
+
+  # Untar relevant member.
+  tmpdir_name <- tempdir()
+  untar(databundle_filename, files=data_source_name, exdir=tmpdir_name)
+  parquet_filename <- file.path(tmpdir_name, data_source_name)
+
+  data <- arrow::read_parquet(parquet_filename)
+
+  file.remove(parquet_filename)
+
+  return(data)
+
 }
