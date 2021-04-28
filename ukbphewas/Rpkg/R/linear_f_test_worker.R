@@ -29,9 +29,18 @@ linear_f_test_worker <- function(worker_id, ...) {
   # Read the covariables.
   covars <- get_xs(conf)
 
+  # Read the XPCs.
+  xpcs <- read.csv(conf$linear_conf$xpcs_path)
+  covars <- merge(covars, xpcs, by = "sample_id")
+
+  # For now, sample_id needs to be a string. Eventually, we will infer this
+  # better.
+  covars$sample_id <- as.character(covars$sample_id)
+  cat(paste0("n samples in covars: ", nrow(covars), "\n"))
+
   # Create a header file.
   cat(paste0("variable_id,analysis_type,n_samples,rss_base,rss_augmented,",
-             "sum_of_sq,F_stat,p\n"),
+             "sum_of_sq,F_stat,n,p\n"),
       file="header.csv")
 
   cat("R: Opened output file.\n")
@@ -47,10 +56,12 @@ linear_f_test_worker <- function(worker_id, ...) {
   do.work <- function(metadata, data) {
     data <- deserialize(data)
 
-    # We explicitly treat the sample_ids as strings.
-    data$sample_id <- as.character(data$sample_id)
-
     # We find indexers for the lhs and rhs.
+    if (class(covars$sample_id) != class(data$sample_id)) {
+      cat(paste0("Covars sample_id class: ", class(covars$sample_id), "\n"))
+      cat(paste0("Data generator sample_id class: ", class(data$sample_id), "\n"))
+      stop("sample_id type mismatch between covars and data generators.")
+    }
     overlapping_samples <- intersect(covars$sample_id, data$sample_id)
 
     if (length(overlapping_samples) == 0) {
@@ -99,6 +110,7 @@ linear_f_test_worker <- function(worker_id, ...) {
       f[2, 2],  # rss aug
       f[2, 4],  # ssq
       f[2, 5],  # F
+      nrow(m),  # n
       f[2, 6],  # p
       sep=","
     )

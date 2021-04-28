@@ -46,13 +46,13 @@ char_to_terms <- function(rhs) {
 drop_columns_with_no_variance <- function(mat,
                                           freeze.col.idx = 1,
                                           verbose = T) {
-  n_unique <- sapply(mat, function(x) length(unique(x)))
+  n_unique <- apply(mat, 2, function(x) length(unique(x)))
 
   keep_cols <- n_unique > 1
 
   # Apply the freeze
   keep_cols[freeze.col.idx] <- TRUE
-  dropped_cols <- names(mat)[!keep_cols]
+  dropped_cols <- colnames(mat)[!keep_cols]
 
   if (verbose && length(dropped_cols) > 0) {
     cat(paste0("R: Dropping columns with no variance: '", dropped_cols, "'\n"))

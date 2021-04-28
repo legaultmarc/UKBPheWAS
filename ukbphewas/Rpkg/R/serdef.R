@@ -20,16 +20,16 @@ deserialize <- function(data) {
     
     li <- list()
     for (meta in metadata) {
-        cur <- data[1:(meta$n_bytes)]
-        data <- data[(meta$n_bytes+1):length(data)]
+        cur <- data[1:(meta$n_bytes)]  # Current col
+        data <- data[(meta$n_bytes+1):length(data)]  # Remainder
 
         if (meta$dtype == "string") {
             # Parse string
             bytes_per_str <- meta$n_bytes / meta$n
-
             v <- rep("", times=meta$n)
+
             idx <- 1
-            for (i in seq(1, meta$n, bytes_per_str)) {
+            for (i in seq(1, meta$n * bytes_per_str, bytes_per_str)) {
               v[idx] <- rawToChar(cur[i:(i+bytes_per_str-1)])
               idx <- idx + 1
             }

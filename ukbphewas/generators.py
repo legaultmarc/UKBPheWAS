@@ -66,12 +66,17 @@ class MissingDataSourceError(Exception):
 
 @requires_data_source("continuous_variables")
 @analysis_type("CONTINUOUS_VARIABLE")
-def data_generator_continuous_variables(configuration, _normalize=True,
-                                        only_do=None):
+def data_generator_continuous_variables(configuration, _normalize=True):
 
     raw_data = configuration.get_cache()["continuous_variables"]
 
     raw_data["variable"] = "cont_" + raw_data["variable"].astype("string")
+
+    if configuration.only_do is not None:
+        raw_data = raw_data.loc[
+            raw_data.variable.isin(configuration.only_do),
+            :
+        ]
 
     # Pivot into wide format.
     raw_data = raw_data.pivot_table(
@@ -96,8 +101,6 @@ def data_generator_continuous_variables(configuration, _normalize=True,
     n_generated = 0
 
     columns = raw_data.columns
-    if only_do is not None:
-        columns = [col for col in raw_data.columns if col in only_do]
 
     print("Py: Data generator (continuous) warmed up.")
     for col in columns:
@@ -124,7 +127,7 @@ def data_generator_continuous_variables(configuration, _normalize=True,
 
 @requires_data_source("self_reported_diseases")
 @analysis_type("SELF_REPORTED")
-def data_generator_self_reported(configuration, only_do=None):
+def data_generator_self_reported(configuration):
     cache = configuration.get_cache()
 
     # sample_id, disease_code, disease
@@ -155,8 +158,11 @@ def data_generator_self_reported(configuration, only_do=None):
         for _, row in sr_coding.iterrows()
     ])
 
-    if only_do is not None:
-        sr_coding = sr_coding.loc[sr_coding.node_id.isin(only_do), :]
+    if configuration.only_do is not None:
+        sr_coding = sr_coding.loc[
+            sr_coding.node_id.isin(configuration.only_do),
+            :
+        ]
 
     n_generated = 0
     for _, coding in sr_coding.iterrows():
@@ -207,7 +213,7 @@ def data_generator_self_reported(configuration, only_do=None):
 
 @requires_data_source("cardiovascular_outcomes")
 @analysis_type("CV_ENDPOINTS")
-def data_generator_cv_endpoints(configuration, only_do=None):
+def data_generator_cv_endpoints(configuration):
     cache = configuration.get_cache()
     data = cache["cardiovascular_outcomes"]
 
@@ -217,9 +223,8 @@ def data_generator_cv_endpoints(configuration, only_do=None):
 
     cols = [i for i in data.columns if i != "sample_id"]
 
-    if only_do is not None:
-        only_do = set(only_do)
-        cols = [i for i in cols if i in only_do]
+    if configuration.only_do is not None:
+        cols = [i for i in cols if i in configuration.only_do]
 
     n_generated = 0
     for col in cols:
@@ -244,7 +249,7 @@ def data_generator_cv_endpoints(configuration, only_do=None):
 
 @requires_data_source("icd10")
 @analysis_type("ICD10_3CHAR")
-def data_generator_icd10_3chars(configuration, only_do=None):
+def data_generator_icd10_3chars(configuration):
     cache = configuration.get_cache()
     data = cache["icd10"]
 
@@ -258,8 +263,8 @@ def data_generator_icd10_3chars(configuration, only_do=None):
 
     codes = data[["icd10"]].drop_duplicates()
 
-    if only_do is not None:
-        codes = codes.loc[codes.icd10.isin(only_do), :]
+    if configuration.only_do is not None:
+        codes = codes.loc[codes.icd10.isin(configuration.only_do), :]
 
     # Add a column for cancer codes.
     codes["chapter"] = codes.icd10.str.get(0)
@@ -304,14 +309,17 @@ def data_generator_icd10_3chars(configuration, only_do=None):
 
 @requires_data_source("icd10")
 @analysis_type("ICD10_BLOCK")
-def data_generator_icd10_block(configuration, only_do=None):
+def data_generator_icd10_block(configuration):
     data = configuration.get_cache()["icd10"]
 
     # Read the ICD10 block metadata.
     icd10_blocks = pd.read_csv(os.path.join(DATA_ROOT, "icd10_blocks.csv.gz"))
 
-    if only_do is not None:
-        icd10_blocks = icd10_blocks.loc[icd10_blocks.block.isin(only_do), :]
+    if configuration.only_do is not None:
+        icd10_blocks = icd10_blocks.loc[
+            icd10_blocks.block.isin(configuration.only_do),
+            :
+        ]
         if icd10_blocks.shape[0] == 0:
             return
 
@@ -395,7 +403,7 @@ SexExclusion = collections.namedtuple(
 
 @requires_data_source("icd10")
 @analysis_type("PHECODES")
-def data_generator_phecodes(configuration, only_do=None):
+def data_generator_phecodes(configuration):
     data = configuration.get_cache()["icd10"]
 
     # Strip dots from ICD10 codes.
@@ -464,8 +472,8 @@ def data_generator_phecodes(configuration, only_do=None):
 
     codes = data.phecode.dropna().drop_duplicates()
 
-    if only_do is not None:
-        only_do = set(only_do)
+    if configuration.only_do is not None:
+        only_do = set(configuration.only_do)
         codes = [code for code in codes if code in only_do]
 
     n_generated = 0

@@ -428,4 +428,4 @@ def _run_phewas_in_sandbox(configuration, **kwargs):
         teardown_analysis(kwargs["output_filename"])
     finally:
         os.chdir("..")
-        # shutil.rmtree(analysis_id)
+        shutil.rmtree(analysis_id)

@@ -25,13 +25,14 @@ class DoBinary(_BinaryConfiguration):
 
 
 class DoBinaryLRT(DoBinary):
-    def __init__(self, augmented_variables, *args, **kwargs):
+    def __init__(self, augmented_variables, xpcs_path, *args, **kwargs):
         self.worker_script = os.path.abspath(os.path.join(
             os.path.dirname(Rpkg.__file__),
             "R", "logistic_deviance_diff_test_worker.R"
         ))
 
         self.augmented_variables = augmented_variables
+        self.xpcs_path = xpcs_path
         super().__init__(*args, **kwargs)
 
 
@@ -66,12 +67,13 @@ class DoContinuousDescriptive(DoLinear):
 
 
 class DoFTest(DoLinear):
-    def __init__(self, augmented_variables):
+    def __init__(self, augmented_variables, xpcs_path):
         self.worker_script = os.path.abspath(os.path.join(
             os.path.dirname(Rpkg.__file__),
             "R", "linear_f_test_worker.R"
         ))
         self.augmented_variables = augmented_variables
+        self.xpcs_path = xpcs_path
 
 
 T = TypeVar("T")
@@ -83,6 +85,7 @@ class Configuration(object):
         databundle_path,
         model_rhs,
         limit=None,
+        only_do=None,
         subset=None,
         linear_conf=SkipLinear(),
         binary_conf=SkipBinary(),
@@ -96,8 +99,9 @@ class Configuration(object):
         self._cache = None
 
         self.model_rhs = model_rhs
-        self.limit = limit
-        self.subset = subset
+        self.limit = limit  # Limit the number of phenotypes
+        self.subset = subset  # Subset of individuals
+        self.only_do = only_do  # Limit to specific phenotypes
 
         # Set automatically by CLI if --male-only or --female-only
         self.sex_stratified = False
