@@ -5,7 +5,7 @@
 # initialization and a high throughput phase.
 #
 # Shared covariables will be serialized to disk to be passed more easily.
-# 
+#
 # What R needs:
 # fit1 <- lm(y ~ covars)
 # fit2 <- lm(y ~ covars + gene_pcs)
@@ -36,16 +36,18 @@ linear_f_test_worker <- function(worker_id, ...) {
   # For now, sample_id needs to be a string. Eventually, we will infer this
   # better.
   covars$sample_id <- as.character(covars$sample_id)
-  cat(paste0("n samples in covars: ", nrow(covars), "\n"))
 
   # Create a header file.
-  cat(paste0("variable_id,analysis_type,n_samples,rss_base,rss_augmented,",
-             "sum_of_sq,F_stat,n,p\n"),
-      file="header.csv")
+  cat(paste0("variable_id,analysis_type,n_samples,rss_base,n_params_base,",
+             "rss_augmented,n_params_aug,sum_of_sq,F_stat,p\n"),
+      file="header_summary.csv")
 
   cat("R: Opened output file.\n")
   output_file <- file(
-    paste0("results_worker_", worker_id, ".csv"), open = "wt"
+    paste0("results_worker_", worker_id, "_summary.csv"), open = "wt"
+  )
+  model_file <- file(
+    paste0("results_worker_", worker_id, "_model.json"), open = "wt"
   )
 
   base_cols <- char_to_terms(conf$model_rhs)
@@ -75,7 +77,7 @@ linear_f_test_worker <- function(worker_id, ...) {
     outcome <- names(data)[names(data) != "sample_id"]
 
     m <- cbind(data[data_idx, outcome], covars[covars_idx, base_aug_cols])
-    m <- as.matrix(m[complete.cases(m), ])
+    m <- m[complete.cases(m), ]
 
     # Find columns on the right hand side that have no variance after
     # joining.
@@ -88,34 +90,46 @@ linear_f_test_worker <- function(worker_id, ...) {
       base_aug_cols <- base_aug_cols[!(base_aug_cols %in% dropped_cols)]
     }
 
-    fit_base <- lm(m[, 1] ~ m[, base_cols])
-    fit_aug <- lm(m[, 1] ~ m[, base_aug_cols])
+    ylab <- colnames(m)[1]
+
+    # I'd rather use the formula API so that the column names are nicer in the
+    # output.
+    base_formula <- as.formula(paste0(
+      ylab, " ~ ", paste0(base_cols, collapse = " + ")
+    ))
+    fit_base <- lm(base_formula, data = m)
+
+    aug_formula <- as.formula(paste0(
+      ylab, " ~ ", paste0(base_aug_cols, collapse = " + ")
+    ))
+    fit_aug <- lm(aug_formula, data = m)
 
     f <- anova(fit_base, fit_aug)
 
-    # return(data.frame(
-    #   outcome_id = data$id,
-    #   outcome_label = data$label,
-    #   rss_base = f[1, 2],
-    #   rss_augmented = f[2, 2],
-    #   sum_of_sq = f[2, 4],
-    #   F_stat = f[2, 5],
-    #   p = f[2, 6]
-    # ))
+    # Save the parameters as json.
+    infer_df <- summary(fit_aug)$coefficients
+    colnames(infer_df) <- c("beta", "se", "t", "p")
+    infer_df <- as.data.frame(infer_df[rownames(infer_df) %in% aug_cols, ])
+
     line <- paste(
       metadata$variable_id,
       metadata$analysis_type,
       nrow(m),  # n_samples
       f[1, 2],  # rss base
+      length(base_cols) + 1,  # n parameters base (+1 for intercept)
       f[2, 2],  # rss aug
+      length(base_aug_cols) + 1,  # n parameters base (+1 for intercept)
       f[2, 4],  # ssq
       f[2, 5],  # F
-      nrow(m),  # n
       f[2, 6],  # p
       sep=","
     )
 
     writeLines(line, con = output_file)
+
+    # Coefficients for the augmented model columns.
+    cat(toJSON(infer_df), file = model_file)
+    cat("\n", file=model_file)
 
   }
 
@@ -124,6 +138,7 @@ linear_f_test_worker <- function(worker_id, ...) {
 
   cat("R: closing output file.\n")
   close(output_file)
+  close(model_file)
 
 }
 

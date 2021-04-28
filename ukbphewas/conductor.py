@@ -1,3 +1,4 @@
+import re
 import os
 import shutil
 import time
@@ -92,31 +93,69 @@ def monitor(state):
             monitor_sock.send(b"WEIRD")
 
 
-def teardown_analysis(output_filename):
+def collect_and_teardown_analysis(output_prefix):
     """Teardown a sandboxed analysis by collecting worker results."""
+    # Pattern to define worker artifacts.
+    # The format is:
+    #  results_worker_ID_output_filename.ext
+    pat = (r"^results_worker_(?P<worker_id>\d)_"
+            "(?P<target>\w+)"
+            "\.(?P<ext>[a-zA-Z]+)$")
+
+    pat = re.compile(pat)
+
     # Infer the analysis id from current directory.
     cwd = os.getcwd()
     analysis_id = os.path.split(cwd)[-1]
 
-    if os.path.isfile("header.csv"):
-        with open("header.csv", "r") as f:
-            header = f.read()
+    # There may be multiple file to collect, we detect it.
+    worker_files = [fn for fn in os.listdir() if re.match(pat, fn)]
+    artifacts = [re.match(pat, fn).groupdict() for fn in worker_files]
 
-    else:
-        header = None
+    output_files = {}
 
-    with open(os.path.join("..", output_filename), "w") as out:
-        if header:
-            out.write(header)
+    def close_files():
+        for f in output_files.values():
+            f.close()
 
-        for filename in os.listdir():
-            # We only concatenate files that start with results_worker as a
-            # convention.
-            if not filename.startswith("results_worker"):
+    try:
+        for o in artifacts:
+            target = o["target"]
+            fn = os.path.join("..", "{}_{}.{}".format(
+                output_prefix, o["target"], o["ext"])
+            )
+
+            if target not in output_files:
+                print(f"Opening output file: {fn}")
+                output_files[target] = open(fn, "w")
+
+    except Exception as e:
+        close_files()
+        raise e
+
+    # Detect and write headers.
+    header_pat = re.compile(r"^header_(?P<target>\w+)\.[a-zA-Z]+$")
+    for fn in os.listdir():
+        match = re.match(header_pat, fn)
+        if match:
+            # We found a header and we need to write it.
+            target = match.groupdict()["target"]
+
+            if target not in output_files:
+                print("WARNING ignoring header for unknown target: '{}'"
+                      "".format(target))
                 continue
 
-            with open(filename, "r") as f:
-                out.write(f.read())
+            with open(fn, "r") as f:
+                output_files[target].write(f.read())
+
+    # Aggregate output files appropriately.
+    for filename, artifact in zip(worker_files, artifacts):
+        out = output_files[artifact["target"]]
+        with open(filename, "r") as f:
+            out.write(f.read())
+
+    close_files()
 
 
 def setup_analysis(configuration):
@@ -135,7 +174,7 @@ def setup_analysis(configuration):
     return analysis_id
 
 
-def run_phewas(configuration, n_workers, data_generators, output_filename,
+def run_phewas(configuration, n_workers, data_generators, output_prefix,
                worker_script):
 
     context = zmq.Context()
@@ -385,9 +424,7 @@ def main():
             f(configuration) for t, f in data_generators if t == "linear"
         ]
         phewas_kwargs["worker_script"] = configuration.linear_conf.worker_script
-        phewas_kwargs["output_filename"] = "{}_continuous.csv".format(
-            args.output
-        )
+        phewas_kwargs["output_prefix"] = "{}_continuous".format(args.output)
 
         _run_phewas_in_sandbox(configuration, **phewas_kwargs)
 
@@ -401,7 +438,7 @@ def main():
             f(configuration) for t, f in data_generators if t == "binary"
         ]
         phewas_kwargs["worker_script"] = configuration.binary_conf.worker_script
-        phewas_kwargs["output_filename"] = "{}_binary.csv".format(args.output)
+        phewas_kwargs["output_prefix"] = "{}_binary".format(args.output)
 
         _run_phewas_in_sandbox(configuration, **phewas_kwargs)
 
@@ -425,7 +462,7 @@ def _run_phewas_in_sandbox(configuration, **kwargs):
         run_phewas(configuration, **kwargs)
 
         # Collect results and remove temporary files.
-        teardown_analysis(kwargs["output_filename"])
+        collect_and_teardown_analysis(kwargs["output_prefix"])
     finally:
         os.chdir("..")
         shutil.rmtree(analysis_id)
