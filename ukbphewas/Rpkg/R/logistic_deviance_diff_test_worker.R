@@ -48,7 +48,8 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
   covars$sample_id <- as.character(covars$sample_id)
 
   # Create a header file.
-  cat(paste0("variable_id,analysis_type,n_cases,n_controls,",
+  cat(paste0("variable_id,analysis_type,sex_subset,",
+             "n_cases,n_controls,",
              "n_excluded_from_controls,",
              "deviance_base,n_params_base,",
              "deviance_augmented,n_params_augmented,",
@@ -100,7 +101,7 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
     aug_data_matrix <- aug_data_matrix[keep, ]
     col_drop_li <- drop_columns_with_no_variance(aug_data_matrix)
     aug_data_matrix <- col_drop_li$mat
-    dropped_cols <- col_drop_li$droppoed_cols
+    dropped_cols <- col_drop_li$dropped_cols
 
     if (length(dropped_cols) != 0) {
       base_cols <- base_cols[!(base_cols %in% dropped_cols)]
@@ -120,6 +121,7 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
     line <- paste(
       metadata$variable_id,
       metadata$analysis_type,
+      ifelse(is.null(metadata$sex_subset), "BOTH", metadata$sex_subset),
       n_cases,
       n_controls,
       n_excluded,
@@ -143,6 +145,8 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
     )
     infer_df$p <- 2 * pnorm(-abs(infer_df$z))
     infer_df$nlog10p <- -2 * pnorm(-abs(infer_df$z), log.p = T) / log(10)
+
+    infer_df[1, "variable"] <- "intercept"
 
     cat(toJSON(
       list(

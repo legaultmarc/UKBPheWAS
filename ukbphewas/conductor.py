@@ -1,6 +1,7 @@
 import re
 import os
 import shutil
+import gzip
 import time
 import uuid
 import subprocess
@@ -120,13 +121,13 @@ def collect_and_teardown_analysis(output_prefix):
     try:
         for o in artifacts:
             target = o["target"]
-            fn = os.path.join("..", "{}_{}.{}".format(
+            fn = os.path.join("..", "{}_{}.{}.gz".format(
                 output_prefix, o["target"], o["ext"])
             )
 
             if target not in output_files:
                 print(f"Opening output file: {fn}")
-                output_files[target] = open(fn, "w")
+                output_files[target] = gzip.open(fn, "wb")
 
     except Exception as e:
         close_files()
@@ -145,13 +146,13 @@ def collect_and_teardown_analysis(output_prefix):
                       "".format(target))
                 continue
 
-            with open(fn, "r") as f:
+            with open(fn, "rb") as f:
                 output_files[target].write(f.read())
 
     # Aggregate output files appropriately.
     for filename, artifact in zip(worker_files, artifacts):
         out = output_files[artifact["target"]]
-        with open(filename, "r") as f:
+        with open(filename, "rb") as f:
             out.write(f.read())
 
     close_files()

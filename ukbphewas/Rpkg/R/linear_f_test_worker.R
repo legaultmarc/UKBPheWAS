@@ -107,9 +107,18 @@ linear_f_test_worker <- function(worker_id, ...) {
     f <- anova(fit_base, fit_aug)
 
     # Save the parameters as json.
-    infer_df <- summary(fit_aug)$coefficients
-    colnames(infer_df) <- c("beta", "se", "t", "p")
-    infer_df <- as.data.frame(infer_df[rownames(infer_df) %in% aug_cols, ])
+    infer_df <- as.data.frame(summary(fit_aug)$coefficients)
+    names(infer_df) <- c("beta", "se", "t", "p")
+    infer_df <- cbind(data.frame(term = rownames(infer_df)), infer_df)
+    rownames(infer_df) <- NULL
+
+    # Calculate nlog10p approximate using chi2
+    infer_df$nlog10p <- pchisq(
+      (infer_df$beta / infer_df$se) ** 2,
+      1,
+      lower.tail = F,
+      log.p = T
+    ) / -log(10)
 
     line <- paste(
       metadata$variable_id,
@@ -128,7 +137,13 @@ linear_f_test_worker <- function(worker_id, ...) {
     writeLines(line, con = output_file)
 
     # Coefficients for the augmented model columns.
-    cat(toJSON(infer_df), file = model_file)
+    cat(toJSON(
+      list(
+        variable_id = metadata$variable_id,
+        analysis_type = metadata$analysis_type,
+        model_fit = infer_df
+      )
+    ), file = model_file)
     cat("\n", file = model_file)
 
   }
