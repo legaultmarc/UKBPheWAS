@@ -16,7 +16,7 @@ def _np_dtype_to_dtype(dtype: np.dtype) -> str:
         return dtype.name
     
     # Should be a string.
-    assert dtype.str.startswith("|S")
+    assert dtype.str.startswith("|S"), dtype
     return "string"
 
 

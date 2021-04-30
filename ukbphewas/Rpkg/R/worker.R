@@ -16,6 +16,9 @@ get_xs <- function(configuration) {
   )
 
   if (!is.null(configuration$subset)) {
+    cat(paste0(
+        "R: Subsetting ", length(configuration$subset), " individuals.\n"
+    ))
     data <- subset(data, sample_id %in% configuration$subset)
   }
 

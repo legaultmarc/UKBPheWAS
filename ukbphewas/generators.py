@@ -35,28 +35,6 @@ class analysis_type(object):
         return data_gen
 
 
-def requires_data_source(ds_name):
-    """Decorator to explicitly define the expected data source names.
-
-    Example:
-
-    @requires_data_source("continuous_variables")
-    def data_generator_continuous_variables(*args, **kwargs):
-        pass
-
-    """
-    def wrapper(f):
-        def check_config(configuration, *args, **kwargs):
-            if ds_name not in configuration._cache:
-                raise MissingDataSourceError(ds_name)
-
-            return f(configuration, *args, **kwargs)
-
-        return check_config
-
-    return wrapper
-
-
 class MissingDataSourceError(Exception):
     def __init__(self, data_source_name):
         self.data_source_name = data_source_name
@@ -64,11 +42,18 @@ class MissingDataSourceError(Exception):
                         f"missing data source '{data_source_name}'.")
 
 
-@requires_data_source("continuous_variables")
+def get_or_raise(conf, ds_name):
+    cache = conf.get_cache()
+    try:
+        return cache[ds_name]
+    except KeyError:
+        raise MissingDataSourceError(ds_name)
+
+
 @analysis_type("CONTINUOUS_VARIABLE")
 def data_generator_continuous_variables(configuration, _normalize=True):
 
-    raw_data = configuration.get_cache()["continuous_variables"]
+    raw_data = get_or_raise(configuration, "continuous_variables")
 
     raw_data["variable"] = "cont_" + raw_data["variable"].astype("string")
 
@@ -125,14 +110,11 @@ def data_generator_continuous_variables(configuration, _normalize=True):
         n_generated += 1
 
 
-@requires_data_source("self_reported_diseases")
 @analysis_type("SELF_REPORTED")
 def data_generator_self_reported(configuration):
-    cache = configuration.get_cache()
-
     # sample_id, disease_code, disease
     # which represent sample_id, coding, description
-    data = cache["self_reported_diseases"]
+    data = get_or_raise(configuration, "self_reported_diseases")
     data["y"] = 1.0
 
     # Apply subset.
@@ -211,47 +193,46 @@ def data_generator_self_reported(configuration):
         n_generated += 1
 
 
-@requires_data_source("cardiovascular_outcomes")
 @analysis_type("CV_ENDPOINTS")
 def data_generator_cv_endpoints(configuration):
-    cache = configuration.get_cache()
-    data = cache["cardiovascular_outcomes"]
+    data = get_or_raise(configuration, "cardiovascular_outcomes")
 
     # Apply subset.
     if configuration.subset:
         data = data.loc[data.sample_id.isin(configuration.subset), :].copy()
 
-    cols = [i for i in data.columns if i != "sample_id"]
-
     if configuration.only_do is not None:
-        cols = [i for i in cols if i in configuration.only_do]
+        data = data.loc[data.variable.isin(configuration.only_do), :]
+
+    phenotypes = data.variable.drop_duplicates()
 
     n_generated = 0
-    for col in cols:
+    for phenotype in phenotypes:
         if configuration.limit and n_generated >= configuration.limit:
             break
 
+        cur = data.loc[data["variable"] == phenotype, ["sample_id", "case"]]
+        cur.columns = ["sample_id", "y"]
+
         metadata = {
-            "variable_id": col,
+            "variable_id": phenotype,
             "analysis_type": "CV_ENDPOINTS"
         }
 
-        # We only yield cases.
-        cur = data.loc[data[col] == 1, :]
-
-        yield (
-            metadata,
-            cur[["sample_id", col]].rename(columns={col: "y"})
-        )
+        yield (metadata, cur)
 
         n_generated += 1
 
 
-@requires_data_source("icd10")
 @analysis_type("ICD10_3CHAR")
 def data_generator_icd10_3chars(configuration):
-    cache = configuration.get_cache()
-    data = cache["icd10"]
+    data = get_or_raise(configuration, "icd10")
+
+    # We use the cached exclusions because they should include cancers from
+    # ICD9 codes.
+    cancer_excl_from_controls = pd.Index(
+        get_or_raise(configuration, "cancer_excl_from_controls")["sample_id"]
+    )
 
     # Apply subset.
     if configuration.subset:
@@ -261,7 +242,7 @@ def data_generator_icd10_3chars(configuration):
 
     data["y"] = 1
 
-    codes = data[["icd10"]].drop_duplicates()
+    codes = data[["icd10"]].dropna().drop_duplicates()
 
     if configuration.only_do is not None:
         codes = codes.loc[codes.icd10.isin(configuration.only_do), :]
@@ -272,12 +253,6 @@ def data_generator_icd10_3chars(configuration):
     codes["is_cancer"] = ((codes["chapter"] == "C") |
                           ((codes["chapter"] == "D") & (codes["num"] <= 48)))\
                          .astype(int)
-
-    # We use the cached exclusions because they should include cancers from
-    # ICD9 codes.
-    cancer_excl_from_controls = pd.Index(
-        cache["cancer_excl_from_controls"]["sample_id"]
-    )
 
     n_generated = 0
     for _, row in codes.iterrows():
@@ -307,10 +282,9 @@ def data_generator_icd10_3chars(configuration):
         n_generated += 1
 
 
-@requires_data_source("icd10")
 @analysis_type("ICD10_BLOCK")
 def data_generator_icd10_block(configuration):
-    data = configuration.get_cache()["icd10"]
+    data = get_or_raise(configuration, "icd10")
 
     # Read the ICD10 block metadata.
     icd10_blocks = pd.read_csv(os.path.join(DATA_ROOT, "icd10_blocks.csv.gz"))
@@ -337,6 +311,9 @@ def data_generator_icd10_block(configuration):
     # Apply subset.
     if configuration.subset:
         data = data.loc[data.sample_id.isin(configuration.subset), :].copy()
+
+    if data.icd10.isnull().sum() >= 1:
+        data = data.dropna(subset=["icd10"]).copy()
 
     data["y"] = 1
 
@@ -401,10 +378,9 @@ SexExclusion = collections.namedtuple(
 )
 
 
-@requires_data_source("icd10")
 @analysis_type("PHECODES")
 def data_generator_phecodes(configuration):
-    data = configuration.get_cache()["icd10"]
+    data = get_or_raise(configuration, "icd10")
 
     # Strip dots from ICD10 codes.
     data.icd10 = data.icd10.str.replace(".", "", regex=False)

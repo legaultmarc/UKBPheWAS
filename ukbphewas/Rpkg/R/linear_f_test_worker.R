@@ -129,12 +129,12 @@ linear_f_test_worker <- function(worker_id, ...) {
 
     # Coefficients for the augmented model columns.
     cat(toJSON(infer_df), file = model_file)
-    cat("\n", file=model_file)
+    cat("\n", file = model_file)
 
   }
 
   # Start the main loop.
-  Worker(worker_id, ..., callback=do.work)
+  Worker(worker_id, ..., callback = do.work)
 
   cat("R: closing output file.\n")
   close(output_file)
