@@ -378,6 +378,15 @@ SexExclusion = collections.namedtuple(
 )
 
 
+def _build_phecode_index(data):
+    data["first_char"] = data.phecode.str.get(0)
+    out = {}
+    for char in data["first_char"].drop_duplicates():
+        out[char] = data.loc[data["first_char"] == char, :]
+
+    return out
+
+
 @analysis_type("PHECODES")
 def data_generator_phecodes(configuration):
     data = get_or_raise(configuration, "icd10")
@@ -386,6 +395,7 @@ def data_generator_phecodes(configuration):
     data.icd10 = data.icd10.str.replace(".", "", regex=False)
 
     # Apply subset.
+    # This includes sex-stratified analyses.
     if configuration.subset:
         data = data.loc[data.sample_id.isin(configuration.subset), :]
 
@@ -406,6 +416,9 @@ def data_generator_phecodes(configuration):
     # Join with the diseases.
     data = pd.merge(data, icd10_to_phecode,
                     left_on="icd10", right_on="icd10")
+
+    data = data.dropna(subset=["phecode"])
+    data = data.drop_duplicates(subset=["sample_id", "phecode"])
 
     # Read the gender exclusions.
     gender_exclusions = pd.read_csv(
@@ -437,14 +450,21 @@ def data_generator_phecodes(configuration):
         females = configuration.get_females()
         females_frame = pd.DataFrame({"sample_id": females, "y": np.nan})
 
+        data["male"] = np.nan
+        data.loc[data["sample_id"].isin(males), "male"] = 1
+        data.loc[data["sample_id"].isin(females), "male"] = 0
+
         # Check if analysis is already male or female only.
         # If this is the case, we'll skip the exclusions.
-        if configuration.subset is None:
+        if configuration.get_analyzed_sex() == "BOTH":
             analysis_male_only = analysis_female_only = False
-
         else:
-            analysis_male_only = males.isin(configuration.subset).all()
-            analysis_female_only = females.isin(configuration.subset).all()
+            analysis_male_only = configuration.get_analyzed_sex() == "MALE"
+            analysis_female_only = configuration.get_analyzed_sex() == "FEMALE"
+
+    # Build a dict of 1st phecode char to subset of the data to enhance
+    # performance.
+    phecode_index = _build_phecode_index(data)
 
     codes = data.phecode.dropna().drop_duplicates()
 
@@ -462,14 +482,8 @@ def data_generator_phecodes(configuration):
             "analysis_type": "PHECODES",
         }
 
-        # If code == 278, we should also include 278.*
-        # If it's 278.1 we shouldn't...
-        #
-        # Same goes if code is 008.5 it whould include 008.5*
-        # If it's 008.52 it shouldn't include parents.
-        cur = data.loc[
-            data.phecode.str[:len(code)] == code,
-        ["sample_id", "y"]]
+        # Dict based on first character to accelerate indexing.
+        cur = phecode_index.get(code[0])
 
         # Check gender exclusion
         if configuration.sample_sex_known():
@@ -485,15 +499,15 @@ def data_generator_phecodes(configuration):
                 if analysis_female_only:
                     continue
 
-                cur = pd.concat((cur, females_frame))
                 metadata["sex_subset"] = "MALE_ONLY"
+                cur = cur.loc[cur.male == 1, :]
 
             elif sex_excl.female_only:
                 if analysis_male_only:
                     continue
 
-                cur = pd.concat((cur, males_frame))
                 metadata["sex_subset"] = "FEMALE_ONLY"
+                cur = cur.loc[cur.male == 0, :]
 
             else:
                 metadata["sex_subset"] = "BOTH"
@@ -501,6 +515,15 @@ def data_generator_phecodes(configuration):
         else:
             metadata["sex_subset"] = "SEX_UNKNOWN"
 
+        # If code == 278, we should also include 278.*
+        # If it's 278.1 we shouldn't...
+        #
+        # Same goes if code is 008.5 it whould include 008.5*
+        # If it's 008.52 it shouldn't include parents.
+        cur = cur.loc[
+            cur.phecode.str.slice(stop=len(code)) == code,
+            ["sample_id", "y"]
+        ]
 
         # Define samples to exclude.
         exclusion_range = phecode_to_excl_ranges.get(code)
@@ -520,6 +543,9 @@ def data_generator_phecodes(configuration):
             ].drop_duplicates()
 
             # Get samples that have excluded codes.
+            # Unfortunately, codes to exclude don't always have the same 1st
+            # character, so we can't use the smaller dataset.
+            # This step is not that slow.
             samples_to_exclude = pd.Index(data.loc[
                 data.phecode.isin(codes_to_exclude),
                 "sample_id"
@@ -536,6 +562,15 @@ def data_generator_phecodes(configuration):
 
         if (cur.y == 1).sum() < configuration.binary_conf.min_num_cases:
             continue
+
+        # Apply sex exclusion.
+        if metadata["sex_subset"] == "MALE_ONLY":
+            cur = pd.concat((cur, females_frame))
+            cur = cur.drop_duplicates()
+
+        elif metadata["sex_subset"] == "FEMALE_ONLY":
+            cur = pd.concat((cur, males_frame))
+            cur = cur.drop_duplicates()
 
         yield (metadata, cur)
 

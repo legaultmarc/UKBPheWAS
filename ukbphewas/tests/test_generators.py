@@ -200,8 +200,8 @@ def test_phecodes_sex_exclusion():
 
     conf._cache = {}
     conf._cache["icd10"] = pd.DataFrame({
-        "sample_id": ["s1", "s2", "s3", "s4", "s5", "s6"],
-        "icd10": ["C60", "C63", "I21", "C50", "I25", "I200"],
+        "sample_id": ["s1", "s2", "s3", "s4", "s5", "s6", "s4"],
+        "icd10": ["C60", "C63", "I21", "C50", "I25", "I200", "C60"],
     })
 
     expected = {

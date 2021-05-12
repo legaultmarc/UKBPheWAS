@@ -376,6 +376,7 @@ def main():
 
     if args.male_only or args.female_only:
         configuration.sex_stratified = True
+        configuration._analyzed_sex = "MALE" if args.male_only else "FEMALE"
 
         if not configuration.sample_sex_known():
             raise RuntimeError("Requested sex filtering, but no --sex-path "

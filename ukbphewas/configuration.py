@@ -105,6 +105,7 @@ class Configuration(object):
 
         # Set automatically by CLI if --male-only or --female-only
         self.sex_stratified = False
+        self._analyzed_sex = None
 
         # Set if the sex of samples is known (Series with sample id as index).
         # 1=male, 0=female, nan=unknown
@@ -127,6 +128,12 @@ class Configuration(object):
 
     def sample_sex_known(self) -> bool:
         return self._sample_sex is not None
+
+    def get_analyzed_sex(self) -> str:
+        if self._analyzed_sex is None:
+            return "BOTH"
+
+        return self._analyzed_sex
 
     def set_sample_sex(self, sex_series: pd.Series) -> None:
         """Set the sex of samples.
