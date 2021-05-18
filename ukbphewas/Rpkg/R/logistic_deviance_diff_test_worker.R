@@ -79,8 +79,6 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
     cases <- as.character(data[data[, "y"] == 1, "sample_id"])
     to_exclude <- as.character(data[is.na(data[, "y"]), "sample_id"])
 
-    min_num_cases <- conf$binary_conf$min_num_cases
-
     covars$y <- as.numeric(covars$sample_id %in% cases)
     covars[covars$sample_id %in% to_exclude, "y"] <- NA
 
@@ -94,10 +92,6 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
     aug_data_matrix <- model.frame(aug_formula, data = covars)
     keep <- complete.cases(aug_data_matrix)
 
-    if (sum(keep) < min_num_cases) {
-      return()
-    }
-
     aug_data_matrix <- aug_data_matrix[keep, ]
     col_drop_li <- drop_columns_with_no_variance(aug_data_matrix)
     aug_data_matrix <- col_drop_li$mat
@@ -110,6 +104,10 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
 
     n_cases <- sum(aug_data_matrix[, "y"] == 1)
     n_controls <- sum(aug_data_matrix[, "y"] == 0)
+
+    if (n_cases < conf$binary_conf$min_num_cases) {
+      return()
+    }
 
     aug_data_matrix <- as.matrix(aug_data_matrix)
 
