@@ -8,7 +8,6 @@ import subprocess
 import json
 import argparse
 import multiprocessing
-import uuid
 
 import numpy as np
 import pandas as pd
@@ -158,13 +157,26 @@ def collect_and_teardown_analysis(output_prefix):
     close_files()
 
 
+def get_unused_analysis_id(tries=0):
+    id = str(uuid.uuid4())[:5]
+
+    if tries >= 200:
+        raise RuntimeError("Couldn't find an unused analysis id.")
+
+    if os.path.isdir(id):
+        tries += 1
+        return get_unused_analysis_id(tries)
+
+    return id
+
+
 def setup_analysis(configuration):
     """Setup a directory and configuration files for the analysis."""
     # Create an analysis id and change to the directory for the current
     # analysis.
     # This is to create some kind of sandboxing where workers can write
     # output files during analyses.
-    analysis_id = str(uuid.uuid4())[:5]
+    analysis_id = get_unused_analysis_id()
     os.mkdir(analysis_id)
 
     filename = os.path.join(analysis_id, "analysis_configuration.json")
