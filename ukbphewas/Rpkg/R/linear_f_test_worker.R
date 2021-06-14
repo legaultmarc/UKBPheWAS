@@ -22,6 +22,7 @@ worker_id <- args[1]
 dealer_addr <- args[2]
 monitor_addr <- args[3]
 
+
 linear_f_test_worker <- function(worker_id, ...) {
   # Read the analysis configuration object.
   conf <- fromJSON(file = "analysis_configuration.json")
@@ -30,7 +31,14 @@ linear_f_test_worker <- function(worker_id, ...) {
   covars <- get_xs(conf)
 
   # Read the XPCs.
-  xpcs <- read.csv(conf$linear_conf$xpcs_path)
+
+  xpcs <- read.csv(
+    conf$linear_conf$xpcs_path,
+    colClasses=read_csv_filter_columns(
+      conf$linear_conf$xpcs_path, 
+      c("sample_id", conf$linear_conf$augmented_variables)
+    )
+  )
   covars <- merge(covars, xpcs, by = "sample_id")
 
   # For now, sample_id needs to be a string. Eventually, we will infer this

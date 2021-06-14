@@ -68,6 +68,17 @@ drop_columns_with_no_variance <- function(mat,
 }
 
 
+# Utility to help read only a subset of columns with read.csv.
+# Use as:
+# read.csv(filename,
+#          colClasses=read_csv_filter_columns(filename, keep_cols))
+read_csv_filter_columns <- function(filename, keep_cols) {
+  # Read the header.
+  h <- names(read.csv(filename, nrows=1))
+  ifelse(h %in% keep_cols, NA, "NULL")
+}
+
+
 Worker <- function(worker_id, dealer_addr, monitor_addr, callback) {
   # Connect to the dealer.
   context <- init.context()

@@ -40,7 +40,13 @@ logistic_deviance_diff_test_worker <- function(worker_id, ...) {
   covars <- get_xs(conf)
 
   # Read the XPCs.
-  xpcs <- read.csv(conf$binary_conf$xpcs_path)
+  xpcs <- read.csv(
+    conf$binary_conf$xpcs_path,
+    colClasses=read_csv_filter_columns(
+      conf$binary_conf$xpcs_path,
+      c("sample_id", conf$binary_conf$augmented_variables)
+    )
+  )
   covars <- merge(covars, xpcs, by = "sample_id")
 
   # For now, sample_id needs to be a string. Eventually, we will infer this
